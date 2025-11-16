@@ -47,22 +47,6 @@ class ConfigController extends Controller
         ]);
     }
 
-    public function logQrError(Request $request)
-    {
-        $user = $request->user();
-
-        Log::warning('Reseller QR code modal failed to open', [
-            'user_id' => $user?->id,
-            'reseller_id' => $user?->reseller?->id,
-            'reason' => $request->input('reason', 'unknown'),
-            'url' => $request->input('url'),
-            'user_agent' => $request->userAgent(),
-            'ip' => $request->ip(),
-        ]);
-
-        return response()->json(['status' => 'logged']);
-    }
-
     public function create(Request $request)
     {
         $reseller = $request->user()->reseller;

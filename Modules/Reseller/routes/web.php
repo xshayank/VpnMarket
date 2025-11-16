@@ -36,7 +36,6 @@ Route::prefix('reseller')
         Route::post('/configs', [ConfigController::class, 'store'])
             ->middleware('throttle:10,1')  // 10 requests per minute
             ->name('configs.store');
-        Route::post('/configs/qr-error', [ConfigController::class, 'logQrError'])->name('configs.qrError');
         Route::get('/configs/{config}/edit', [ConfigController::class, 'edit'])->name('configs.edit');
         Route::put('/configs/{config}', [ConfigController::class, 'update'])->name('configs.update');
         Route::post('/configs/{config}/reset-usage', [ConfigController::class, 'resetUsage'])->name('configs.resetUsage');
