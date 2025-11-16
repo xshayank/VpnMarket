@@ -157,7 +157,7 @@
     <div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="closeQRModal()">
         <div class="bg-white dark:bg-gray-800 p-6 rounded-lg max-w-md w-full mx-4" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">QR Code</h3>
+                <h3 id="qrModalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">QR Code</h3>
                 <button onclick="closeQRModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -165,37 +165,9 @@
                 </button>
             </div>
             <div id="qrCodeContainer" class="flex justify-center bg-white p-4 rounded"></div>
+            <p id="qrStatus" class="mt-3 text-sm text-red-600 dark:text-red-400 hidden">خطا در تولید QR code — لطفاً مجدداً تلاش کنید.</p>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <script>
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                alert('لینک سابسکریپشن کپی شد!');
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-            });
-        }
-
-        function showQRCode(url) {
-            const container = document.getElementById('qrCodeContainer');
-            container.innerHTML = '';
-            
-            new QRCode(container, {
-                text: url,
-                width: 256,
-                height: 256,
-                colorDark: '#000000',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.H
-            });
-            
-            document.getElementById('qrModal').classList.remove('hidden');
-        }
-
-        function closeQRModal() {
-            document.getElementById('qrModal').classList.add('hidden');
-        }
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
 </x-app-layout>
