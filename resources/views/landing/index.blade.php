@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $homepage['seo_title'] ?? config('app.name', 'VPN Market') }}</title>
-    <meta name="description" content="{{ $homepage['seo_description'] ?? 'ثبت‌نام سریع ریسلر VPN؛ اتصال امن و پایدار با پشتیبانی لحظه‌ای.' }}">
-    <meta property="og:title" content="{{ $homepage['seo_title'] ?? config('app.name', 'VPN Market') }}">
-    <meta property="og:description" content="{{ $homepage['seo_description'] ?? 'ثبت‌نام سریع ریسلر VPN؛ اتصال امن و پایدار با پشتیبانی لحظه‌ای.' }}">
+    <title>{{ $homepage['seo_title'] ?? 'Falco Panel | فالکو پنل' }}</title>
+    <meta name="description" content="{{ $homepage['seo_description'] ?? 'فالکو پنل | فالکو پنل - ثبت‌نام سریع نماینده با داشبورد فارسی و پایدار' }}">
+    <meta property="og:title" content="{{ $homepage['seo_title'] ?? 'Falco Panel | فالکو پنل' }}">
+    <meta property="og:description" content="{{ $homepage['seo_description'] ?? 'فالکو پنل | فالکو پنل - ثبت‌نام سریع نماینده با داشبورد فارسی و پایدار' }}">
     <meta property="og:image" content="{{ $homepage['og_image_url'] ?? asset('images/og-default.png') }}">
     <meta property="og:locale" content="fa_IR">
     <meta property="og:type" content="website">
@@ -88,7 +88,7 @@
 <div class="container">
     <header class="hero">
         <div>
-            <div class="pill">ریسلر OpenVPN / V2Ray • پشتیبانی ۲۴/۷</div>
+            <div class="pill">فالکو پنل • نماینده OpenVPN / V2Ray • پشتیبانی ۲۴/۷</div>
             <h1>{{ $homepage['hero_title'] }}</h1>
             <p class="subtitle">{{ $homepage['hero_subtitle'] }}</p>
             <div class="cta-row">
@@ -103,7 +103,7 @@
         </div>
         @if(!empty($homepage['hero_media_url']))
             <div class="floating" aria-hidden="true">
-                <img class="hero-media" src="{{ $homepage['hero_media_url'] }}" alt="ریسلر VPN" loading="lazy">
+                <img class="hero-media" src="{{ $homepage['hero_media_url'] }}" alt="نماینده VPN" loading="lazy">
             </div>
         @endif
     </header>
@@ -127,10 +127,10 @@
     <section class="section">
         <div class="section-header">
             <h2>چطور کار می‌کند؟</h2>
-            <p class="lead">در سه مرحله ساده ریسلر شوید و فروش را آغاز کنید.</p>
+            <p class="lead">در سه مرحله ساده نماینده شوید و فروش را آغاز کنید.</p>
         </div>
         <div class="grid steps-grid">
-            <div class="card"><div class="panel-tag">۱</div><h3>ثبت‌نام سریع</h3><p class="muted">فرم ثبت‌نام را پر کنید و نوع ریسلر (کیف پول یا ترافیک) را انتخاب نمایید.</p></div>
+            <div class="card"><div class="panel-tag">۱</div><h3>ثبت‌نام سریع</h3><p class="muted">فرم ثبت‌نام را پر کنید و نوع نماینده (کیف پول یا ترافیک) را انتخاب نمایید.</p></div>
             <div class="card"><div class="panel-tag">۲</div><h3>انتخاب پنل اصلی</h3><p class="muted">از بین Eylandoo، Marzneshin و Marzban پنل مناسب خود را برگزینید.</p></div>
             <div class="card"><div class="panel-tag">۳</div><h3>شارژ اولیه</h3><p class="muted">کیف پول را شارژ کنید یا ترافیک اولیه را خریداری کنید تا حساب فعال شود.</p></div>
             <div class="card"><div class="panel-tag">۴</div><h3>ساخت کانفیگ</h3><p class="muted">کانفیگ‌ها را بسازید، بفروشید و وضعیت مصرف را زنده مشاهده کنید.</p></div>
@@ -167,7 +167,7 @@
             <div class="glass card" style="text-align: center;">
                 <h2>در انتظار اتصال پنل‌ها</h2>
                 <p class="muted">فعلاً هیچ پنل فعالی در دسترس نیست. برای شروع سریع، به لیست انتظار بپیوندید تا اولین نفر باشید.</p>
-                <a class="btn btn-primary" href="mailto:support@vpnmarket.com?subject=Join%20Reseller%20Waitlist">به لیست انتظار بپیوندید</a>
+                <a class="btn btn-primary" href="https://t.me/xShayank" rel="noopener" target="_blank">به لیست انتظار بپیوندید</a>
             </div>
         </section>
     @endif
@@ -197,14 +197,14 @@
             <div class="glass card" style="text-align: center;">
                 <h2>پلنی برای نمایش نیست</h2>
                 <p class="muted">پلن‌های جدید در حال آماده‌سازی هستند. برای شروع همکاری با ما در ارتباط باشید.</p>
-                <a class="btn btn-secondary" href="tel:+989123456789">تماس با پشتیبانی</a>
+                <a class="btn btn-secondary" href="https://t.me/xShayank" rel="noopener" target="_blank">تماس با پشتیبانی</a>
             </div>
         </section>
     @endif
 
     <section class="section">
         <div class="section-header">
-            <h2>چرا ریسلر ما شوید؟</h2>
+            <h2>چرا نماینده ما شوید؟</h2>
             <p class="lead">ویژگی‌هایی که خیال شما را بابت کیفیت، سرعت و پشتیبانی راحت می‌کند.</p>
         </div>
         <div class="grid features-grid">
@@ -221,8 +221,8 @@
     @if($homepage['show_testimonials'] && !empty($homepage['testimonials']))
     <section class="section">
         <div class="section-header">
-            <h2>بازخورد ریسلرها</h2>
-            <p class="lead">نظرات چند ریسلر فعال درباره تجربه همکاری.</p>
+            <h2>بازخورد نماینده‌ها</h2>
+            <p class="lead">نظرات چند نماینده فعال درباره تجربه همکاری.</p>
         </div>
         <div class="grid panels-grid">
             @foreach($homepage['testimonials'] as $testimonial)
@@ -256,10 +256,10 @@
     <section class="section">
         <div class="glass card" style="text-align: center;">
             <h2>همین حالا شروع کنید</h2>
-            <p class="muted">انتخاب نوع ریسلر و پنل اصلی در ثبت‌نام قابل تغییر است.</p>
+            <p class="muted">انتخاب نوع نماینده و پنل اصلی در ثبت‌نام قابل تغییر است.</p>
             <div class="cta-row" style="justify-content: center;">
-                <a class="btn btn-primary" href="{{ $registerBase . '?reseller_type=wallet' }}">شروع ریسلر کیف پول</a>
-                <a class="btn btn-secondary" href="{{ $registerBase . '?reseller_type=traffic' }}">شروع ریسلر ترافیک</a>
+                <a class="btn btn-primary" href="{{ $registerBase . '?reseller_type=wallet' }}">شروع نماینده کیف پول</a>
+                <a class="btn btn-secondary" href="{{ $registerBase . '?reseller_type=traffic' }}">شروع نماینده ترافیک</a>
             </div>
         </div>
     </section>
@@ -268,8 +268,8 @@
         <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px;">
             <div><a href="{{ url('/register') }}">ثبت نام</a></div>
             <div><a href="{{ url('/login') }}">ورود</a></div>
-            <div><a href="{{ url('/dashboard') }}">پنل ریسلر</a></div>
-            <div><a href="mailto:support@vpnmarket.com">پشتیبانی</a></div>
+            <div><a href="{{ url('/reseller') }}">پنل نماینده</a></div>
+            <div><a href="https://t.me/xShayank" rel="noopener" target="_blank">پشتیبانی</a></div>
             <div><a href="{{ url('/privacy') }}">سیاست حریم خصوصی</a></div>
             <div><a href="{{ url('/terms') }}">شرایط استفاده</a></div>
         </div>

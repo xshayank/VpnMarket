@@ -8,8 +8,6 @@ use App\Models\Order;
 use App\Models\Panel;
 use App\Models\Plan;
 use App\Models\Setting;
-use App\Models\User;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use App\Support\Tetra98Config;
 
@@ -39,10 +37,10 @@ Route::get('/', function () {
     $defaultPanelId = $settings->get('homepage.default_panel_id');
 
     $homepage = [
-        'hero_title' => $settings->get('homepage.hero_title', 'به جمع ریسلرهای VPN Market بپیوندید'),
-        'hero_subtitle' => $settings->get('homepage.hero_subtitle', 'OpenVPN و V2Ray با تحویل سریع، پایداری بالا و پشتیبانی اختصاصی'),
+        'hero_title' => $settings->get('homepage.hero_title', 'فالکو پنل | Falco Panel - داشبورد مدیریت نماینده'),
+        'hero_subtitle' => $settings->get('homepage.hero_subtitle', 'OpenVPN و V2Ray با تحویل سریع، پایداری بالا و پشتیبانی اختصاصی برای نماینده‌ها'),
         'hero_media_url' => $settings->get('homepage.hero_media_url'),
-        'primary_cta_text' => $settings->get('homepage.primary_cta_text', 'شروع به عنوان ریسلر'),
+        'primary_cta_text' => $settings->get('homepage.primary_cta_text', 'شروع در فالکو پنل'),
         'secondary_cta_text' => $settings->get('homepage.secondary_cta_text', 'مشاهده پلن‌ها'),
         'show_panels' => $boolSetting('homepage.show_panels', true),
         'show_plans' => $boolSetting('homepage.show_plans', true),
@@ -52,8 +50,8 @@ Route::get('/', function () {
         'features' => $decodeJson('homepage.features'),
         'testimonials' => $decodeJson('homepage.testimonials'),
         'faqs' => $decodeJson('homepage.faqs'),
-        'seo_title' => $settings->get('homepage.seo_title', config('app.name', 'VPN Market')), 
-        'seo_description' => $settings->get('homepage.seo_description', 'ثبت‌نام سریع ریسلر VPN؛ اتصال امن و پایدار با پشتیبانی لحظه‌ای.'),
+        'seo_title' => $settings->get('homepage.seo_title', 'Falco Panel | فالکو پنل'),
+        'seo_description' => $settings->get('homepage.seo_description', 'فالکو پنل | فالکو پنل - ثبت‌نام سریع نماینده با داشبورد فارسی و پایدار'),
         'og_image_url' => $settings->get('homepage.og_image_url'),
         'default_reseller_type' => $defaultResellerType,
         'default_panel_id' => $defaultPanelId,
@@ -62,7 +60,7 @@ Route::get('/', function () {
     if (empty($homepage['trust_badges'])) {
         $homepage['trust_badges'] = [
             ['icon' => '⏱️', 'label' => 'تحویل اکانت', 'value' => '< 5 دقیقه'],
-            ['icon' => '📈', 'label' => 'میزان رضایت', 'value' => '۹۸٪ ریسلرها'],
+            ['icon' => '📈', 'label' => 'میزان رضایت', 'value' => '۹۸٪ نماینده‌ها'],
             ['icon' => '🛡️', 'label' => 'پایداری شبکه', 'value' => '۹۹.۹٪ آپتایم'],
         ];
     }
@@ -71,14 +69,15 @@ Route::get('/', function () {
         $homepage['features'] = [
             ['icon' => '🚀', 'title' => 'اتصال پرسرعت', 'description' => 'زیرساخت بهینه‌شده برای ایران با پینگ کم و تحویل سریع کانفیگ‌ها.'],
             ['icon' => '🧠', 'title' => 'مدیریت هوشمند', 'description' => 'محدودیت و سهمیه‌بندی خودکار برای اطمینان از سلامت نودها و حساب‌ها.'],
-            ['icon' => '🤝', 'title' => 'پشتیبانی ویژه ریسلر', 'description' => 'پاسخ‌گویی سریع و راهنمای توسعه کسب‌وکار شما در هر مرحله.'],
+            ['icon' => '🤝', 'title' => 'پشتیبانی ویژه نماینده', 'description' => 'پاسخ‌گویی سریع و راهنمای توسعه کسب‌وکار شما در هر مرحله.'],
         ];
     }
 
     if (empty($homepage['faqs'])) {
         $homepage['faqs'] = [
-            ['question' => 'چطور فعال می‌شوم؟', 'answer' => 'ثبت‌نام کنید، نوع ریسلر را انتخاب کنید و اولین شارژ را انجام دهید. فعال‌سازی کمتر از ۵ دقیقه طول می‌کشد.'],
-            ['question' => 'تفاوت کیف پول و ترافیک چیست؟', 'answer' => 'ریسلر کیف پول بر اساس تعداد کانفیگ محدود است؛ ریسلر ترافیک محدودیتی در تعداد کانفیگ ندارد و بر اساس حجم مصرفی محاسبه می‌شود.'],
+            ['question' => 'چطور فعال می‌شوم؟', 'answer' => 'ثبت‌نام کنید، نوع نماینده را انتخاب کنید و اولین شارژ را انجام دهید. فعال‌سازی کمتر از ۵ دقیقه طول می‌کشد.'],
+            ['question' => 'نماینده کیف پول چه شرایطی دارد؟', 'answer' => 'تسویه بر اساس تومان و ترافیک مصرفی انجام می‌شود؛ کاربران نهایی نامحدود هستند. برای شروع، حداقل ۱۵۰,۰۰۰ تومان شارژ اولیه نیاز است.'],
+            ['question' => 'نماینده ترافیک چه شرایطی دارد؟', 'answer' => 'پرداخت بر اساس ترافیک خریداری‌شده/مصرفی است و استفاده بسیار ساده است. کاربران نهایی نامحدود هستند مگر سیاست دیگری تعریف شود.'],
         ];
     }
 
@@ -109,18 +108,7 @@ Route::get('/legacy-home', function () {
 
 Route::middleware(['auth'])->group(function () {
     // Dashboard
-    Route::get('/dashboard', function () {
-        $user = Auth::user();
-        if ($user->show_renewal_notification) {
-            session()->flash('renewal_success', 'سرویس شما با موفقیت تمدید شد. لینک اشتراک شما تغییر کرده است، لطفاً لینک جدید را کپی و در نرم‌افزار خود آپدیت کنید.');
-            $user->update(['show_renewal_notification' => false]);
-        }
-        $orders = $user->orders()->with('plan')->whereNotNull('plan_id')->whereNull('renews_order_id')->latest()->get();
-        $transactions = $user->orders()->with('plan')->latest()->get();
-        $plans = Plan::where('is_active', true)->orderBy('price')->get();
-        $tickets = $user->tickets()->latest()->get();
-        return view('dashboard', compact('orders', 'plans', 'tickets', 'transactions'));
-    })->name('dashboard');
+    Route::permanentRedirect('/dashboard', '/reseller')->name('dashboard');
 
     // Wallet
     Route::get('/wallet/charge', [OrderController::class, 'showChargeForm'])->name('wallet.charge.form');
