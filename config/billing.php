@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'traffic_rate_per_gb' => env('TRAFFIC_RESELLER_GB_RATE', 750),
+    'min_first_traffic_topup_gb' => env('MIN_FIRST_TRAFFIC_TOPUP_GB', 250),
+    'min_traffic_topup_gb' => env('MIN_TRAFFIC_TOPUP_GB', 50),
+
     /*
     |--------------------------------------------------------------------------
     | Wallet-based Reseller Billing Configuration

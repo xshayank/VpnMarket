@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Payments;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ReenableResellerConfigsJob;
 use App\Models\Reseller;
 use App\Models\Transaction;
 use App\Services\Payments\Tetra98Client;
@@ -34,18 +35,39 @@ class Tetra98Controller extends Controller
 
         $minAmount = Tetra98Config::getMinAmountToman();
 
-        $validated = $request->validate([
-            'amount' => ['required', 'integer', 'min:'.$minAmount],
+        $user = Auth::user();
+        $reseller = $user->reseller;
+        $chargeMode = $reseller && $reseller->isTrafficBased() ? 'traffic' : 'wallet';
+        $minAmountGb = null;
+
+        $rules = [
             'phone' => ['required', 'regex:/^09\d{9}$/'],
-        ], [
+        ];
+
+        if ($chargeMode === 'wallet') {
+            $rules['amount'] = ['required', 'integer', 'min:'.$minAmount];
+        } else {
+            $minAmountGb = $reseller && $reseller->isAnySuspended()
+                ? config('billing.min_first_traffic_topup_gb', config('billing.reseller.first_topup.traffic_min_gb', 250))
+                : config('billing.min_traffic_topup_gb', config('billing.reseller.min_topup.traffic_gb', 50));
+            $rules['traffic_gb'] = ['required', 'integer', 'min:'.$minAmountGb];
+        }
+
+        $validated = $request->validate($rules, [
             'amount.required' => 'وارد کردن مبلغ الزامی است.',
             'amount.integer' => 'مبلغ باید به صورت عددی وارد شود.',
             'amount.min' => 'حداقل مبلغ مجاز برای پرداخت '.number_format($minAmount).' تومان است.',
+            'traffic_gb.required' => 'مقدار ترافیک الزامی است.',
+            'traffic_gb.integer' => 'ترافیک باید به صورت عدد صحیح وارد شود.',
+            'traffic_gb.min' => 'حداقل مقدار خرید '.($minAmountGb ?? 0).' گیگابایت است.',
             'phone.required' => 'وارد کردن شماره موبایل برای پرداخت Tetra98 الزامی است.',
             'phone.regex' => 'شماره موبایل باید با 09 شروع شده و 11 رقم باشد.',
         ]);
 
-        $user = Auth::user();
+        $trafficGb = $chargeMode === 'traffic' ? (int) ($validated['traffic_gb'] ?? 0) : null;
+        $amountToman = $chargeMode === 'traffic'
+            ? (int) ($trafficGb * config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750)))
+            : (int) $validated['amount'];
 
         try {
             $hashId = 'tetra98-'.$user->id.'-'.Str::uuid()->toString();
@@ -53,9 +75,15 @@ class Tetra98Controller extends Controller
                 'payment_method' => 'tetra98',
                 'phone' => $validated['phone'],
                 'email' => $user->email,
+                'deposit_mode' => $chargeMode,
+                'type' => $chargeMode === 'traffic' ? Transaction::SUBTYPE_DEPOSIT_TRAFFIC : Transaction::SUBTYPE_DEPOSIT_WALLET,
+                'traffic_gb' => $trafficGb,
+                'rate_per_gb' => config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750)),
+                'computed_amount_toman' => $amountToman,
+                'first_topup' => $reseller?->isAnySuspended() ?? false,
                 'tetra98' => [
                     'hash_id' => $hashId,
-                    'amount_toman' => (int) $validated['amount'],
+                    'amount_toman' => $amountToman,
                     'state' => 'created',
                 ],
             ];
@@ -63,17 +91,30 @@ class Tetra98Controller extends Controller
             $transaction = Transaction::create([
                 'user_id' => $user->id,
                 'order_id' => null,
-                'amount' => (int) $validated['amount'],
+                'amount' => $amountToman,
                 'type' => Transaction::TYPE_DEPOSIT,
                 'status' => Transaction::STATUS_PENDING,
-                'description' => 'شارژ کیف پول (درگاه Tetra98) - در انتظار پرداخت',
+                'description' => $chargeMode === 'traffic'
+                    ? 'خرید ترافیک (درگاه Tetra98) - در انتظار پرداخت'
+                    : 'شارژ کیف پول (درگاه Tetra98) - در انتظار پرداخت',
                 'metadata' => $metadata,
+            ]);
+
+            Log::info('traffic_topup_initiated', [
+                'action' => 'traffic_topup_initiated',
+                'method' => 'tetra98',
+                'reseller_id' => $reseller?->id,
+                'user_id' => $user->id,
+                'traffic_gb' => $trafficGb,
+                'rate_per_gb' => $metadata['rate_per_gb'] ?? null,
+                'amount_toman' => $amountToman,
+                'charge_mode' => $chargeMode,
             ]);
         } catch (Throwable $exception) {
             Log::error('tetra98_initiate_transaction_failed', [
                 'action' => 'tetra98_initiate_transaction_failed',
                 'user_id' => $user->id,
-                'amount' => $validated['amount'],
+                'amount' => $amountToman,
                 'message' => $exception->getMessage(),
             ]);
 
@@ -307,6 +348,11 @@ class Tetra98Controller extends Controller
             $tetraMeta['wallet_credited_at'] = now()->toIso8601String();
             $metadata['tetra98'] = $tetraMeta;
 
+            $depositMode = $metadata['deposit_mode'] ?? ($reseller?->isTrafficBased() ? 'traffic' : 'wallet');
+            $ratePerGb = (int) ($metadata['rate_per_gb'] ?? config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750)));
+            $trafficGb = (int) ($metadata['traffic_gb'] ?? 0);
+            $computedAmount = (int) ($metadata['computed_amount_toman'] ?? $fresh->amount);
+
             Log::info('tetra98_verify_success', [
                 'action' => 'tetra98_verify_success',
                 'transaction_id' => $fresh->id,
@@ -314,28 +360,71 @@ class Tetra98Controller extends Controller
                 'authority' => $authority,
                 'amount' => $fresh->amount,
                 'idempotent' => false,
+                'deposit_mode' => $depositMode,
             ]);
 
-            if ($reseller instanceof Reseller && method_exists($reseller, 'isWalletBased') && $reseller->isWalletBased()) {
-                $reseller->increment('wallet_balance', $fresh->amount);
-                $resellerIdForReenable = $reseller->id;
+            if ($depositMode === 'traffic' && $reseller instanceof Reseller) {
+                $bytes = (int) ($trafficGb * 1024 * 1024 * 1024);
+                $reseller->traffic_total_bytes += $bytes;
+                $reseller->save();
+
+                $metadata['traffic_topup'] = [
+                    'traffic_gb' => $trafficGb,
+                    'credited_bytes' => $bytes,
+                    'computed_amount_toman' => $computedAmount,
+                ];
+
+                $fresh->update([
+                    'status' => Transaction::STATUS_COMPLETED,
+                    'description' => 'خرید ترافیک (درگاه Tetra98)',
+                    'metadata' => $metadata,
+                    'amount' => $computedAmount,
+                ]);
+
+                Log::info('traffic_topup_credited', [
+                    'action' => 'traffic_topup_credited',
+                    'reseller_id' => $reseller->id,
+                    'transaction_id' => $fresh->id,
+                    'traffic_gb' => $trafficGb,
+                    'amount_toman' => $computedAmount,
+                ]);
+
+                if ($reseller->isSuspendedTraffic()) {
+                    $reseller->status = 'active';
+                    $reseller->save();
+
+                    dispatch(new ReenableResellerConfigsJob($reseller, 'traffic'));
+
+                    Log::info('reseller_activated_from_first_topup', [
+                        'action' => 'reseller_activated_from_first_topup',
+                        'reseller_id' => $reseller->id,
+                        'transaction_id' => $fresh->id,
+                        'traffic_gb' => $trafficGb,
+                    ]);
+                }
             } else {
-                $user?->increment('balance', $fresh->amount);
+                if ($reseller instanceof Reseller && method_exists($reseller, 'isWalletBased') && $reseller->isWalletBased()) {
+                    $reseller->increment('wallet_balance', $fresh->amount);
+                    $resellerIdForReenable = $reseller->id;
+                } else {
+                    $user?->increment('balance', $fresh->amount);
+                }
+
+                $metadata['computed_amount_toman'] = $computedAmount;
+                $fresh->update([
+                    'status' => Transaction::STATUS_COMPLETED,
+                    'description' => 'شارژ کیف پول (درگاه Tetra98)',
+                    'metadata' => $metadata,
+                ]);
+
+                Log::info('tetra98_wallet_credited', [
+                    'action' => 'tetra98_wallet_credited',
+                    'transaction_id' => $fresh->id,
+                    'user_id' => $fresh->user_id,
+                    'amount' => $fresh->amount,
+                    'authority' => $authority,
+                ]);
             }
-
-            $fresh->update([
-                'status' => Transaction::STATUS_COMPLETED,
-                'description' => 'شارژ کیف پول (درگاه Tetra98)',
-                'metadata' => $metadata,
-            ]);
-
-            Log::info('tetra98_wallet_credited', [
-                'action' => 'tetra98_wallet_credited',
-                'transaction_id' => $fresh->id,
-                'user_id' => $fresh->user_id,
-                'amount' => $fresh->amount,
-                'authority' => $authority,
-            ]);
         });
 
         if ($resellerIdForReenable) {
