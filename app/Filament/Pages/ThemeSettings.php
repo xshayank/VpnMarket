@@ -3,9 +3,11 @@
 namespace App\Filament\Pages;
 
 use App\Models\Inbound;
+use App\Models\Panel;
 use App\Models\Setting;
 use App\Support\PaymentMethodConfig;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -59,6 +61,15 @@ class ThemeSettings extends Page implements HasForms
             'payment_tetra98_base_url' => config('tetra98.base_url', 'https://tetra98.ir'),
             'payment_tetra98_callback_path' => config('tetra98.callback_path', '/webhooks/tetra98/callback'),
             'payment_tetra98_min_amount' => config('tetra98.min_amount_toman', 10000),
+            'homepage.hero_title' => 'همین امروز فروش VPN را شروع کنید',
+            'homepage.hero_subtitle' => 'ریسلر OpenVPN و V2Ray شوید؛ پنل آماده، اتصال پایدار و پشتیبانی لحظه‌ای.',
+            'homepage.primary_cta_text' => 'شروع به عنوان ریسلر',
+            'homepage.secondary_cta_text' => 'مشاهده پلن‌ها',
+            'homepage.show_panels' => true,
+            'homepage.show_plans' => true,
+            'homepage.show_testimonials' => false,
+            'homepage.show_faq' => true,
+            'homepage.default_reseller_type' => 'wallet',
         ];
 
         $this->data = array_merge($defaultData, $settings);
@@ -75,6 +86,31 @@ class ThemeSettings extends Page implements HasForms
         $this->data['payment_tetra98_base_url'] = $settings['payment.tetra98.base_url'] ?? $defaultData['payment_tetra98_base_url'];
         $this->data['payment_tetra98_callback_path'] = $settings['payment.tetra98.callback_path'] ?? $defaultData['payment_tetra98_callback_path'];
         $this->data['payment_tetra98_min_amount'] = $settings['payment.tetra98.min_amount'] ?? $defaultData['payment_tetra98_min_amount'];
+
+        $homepageToggles = [
+            'homepage.show_panels',
+            'homepage.show_plans',
+            'homepage.show_testimonials',
+            'homepage.show_faq',
+        ];
+
+        foreach ($homepageToggles as $toggleKey) {
+            $this->data[$toggleKey] = array_key_exists($toggleKey, $settings)
+                ? filter_var($settings[$toggleKey], FILTER_VALIDATE_BOOLEAN)
+                : (bool) ($defaultData[$toggleKey] ?? false);
+        }
+
+        $jsonFields = [
+            'homepage.trust_badges',
+            'homepage.features',
+            'homepage.testimonials',
+            'homepage.faqs',
+        ];
+
+        foreach ($jsonFields as $jsonKey) {
+            $raw = $settings[$jsonKey] ?? null;
+            $this->data[$jsonKey] = $raw ? json_decode($raw, true) : [];
+        }
     }
     public function form(Form $form): Form
     {
@@ -101,6 +137,80 @@ class ThemeSettings extends Page implements HasForms
                             ])->default('cyberpunk')->live(),
 //                            FileUpload::make('site_logo')->label('لوگوی سایت')->image()->directory('logos')->visibility('public'),
 
+                        ]),
+
+                    Tabs\Tab::make('صفحه اصلی')
+                        ->icon('heroicon-o-home')
+                        ->schema([
+                            Section::make('محتوای اصلی')->schema([
+                                TextInput::make('homepage.hero_title')->label('تیتر اصلی')->placeholder('شروع درآمد دلاری از فروش VPN'),
+                                Textarea::make('homepage.hero_subtitle')->label('زیرتیتر')->rows(2),
+                                TextInput::make('homepage.hero_media_url')->label('لینک تصویر یا Lottie')->helperText('اختیاری - برای نمایش در پس‌زمینه یا کنار متن'),
+                                TextInput::make('homepage.primary_cta_text')->label('متن دکمه اصلی')->placeholder('شروع به عنوان ریسلر'),
+                                TextInput::make('homepage.secondary_cta_text')->label('متن دکمه ثانویه')->placeholder('مشاهده پلن‌ها'),
+                            ])->columns(2),
+
+                            Section::make('پیش‌فرض ثبت‌نام')->schema([
+                                Radio::make('homepage.default_reseller_type')
+                                    ->label('نوع پیش‌فرض ریسلر')
+                                    ->options([
+                                        'wallet' => 'کیف پول',
+                                        'traffic' => 'ترافیک',
+                                    ])->inline()->default('wallet'),
+                                Select::make('homepage.default_panel_id')
+                                    ->label('پنل پیش‌فرض (اختیاری)')
+                                    ->options(fn () => Panel::where('is_active', true)->pluck('name', 'id'))
+                                    ->searchable()
+                                    ->placeholder('انتخاب پنل پیش‌فرض')
+                                    ->nullable(),
+                            ])->columns(2),
+
+                            Section::make('نمایش بخش‌ها')->schema([
+                                Toggle::make('homepage.show_panels')->label('نمایش پنل‌های فعال'),
+                                Toggle::make('homepage.show_plans')->label('نمایش پلن‌ها'),
+                                Toggle::make('homepage.show_testimonials')->label('نمایش نظر مشتریان'),
+                                Toggle::make('homepage.show_faq')->label('نمایش پرسش‌های متداول'),
+                            ])->columns(2),
+
+                            Section::make('اعتماد و ویژگی‌ها')->schema([
+                                Repeater::make('homepage.trust_badges')
+                                    ->label('بج‌های اعتماد')
+                                    ->schema([
+                                        TextInput::make('icon')->label('آیکن')->placeholder('💠'),
+                                        TextInput::make('label')->label('برچسب'),
+                                        TextInput::make('value')->label('مقدار'),
+                                    ])->columns(3),
+                                Repeater::make('homepage.features')
+                                    ->label('ویژگی‌ها')
+                                    ->schema([
+                                        TextInput::make('icon')->label('آیکن')->placeholder('⚡'),
+                                        TextInput::make('title')->label('عنوان'),
+                                        Textarea::make('description')->label('توضیح')->rows(2),
+                                    ])->columns(3),
+                            ]),
+
+                            Section::make('تستیمونال و FAQ')->schema([
+                                Repeater::make('homepage.testimonials')
+                                    ->label('نظرات کاربران')
+                                    ->schema([
+                                        Textarea::make('quote')->label('متن نظر')->rows(2),
+                                        TextInput::make('name')->label('نام'),
+                                        TextInput::make('role')->label('سمت'),
+                                        TextInput::make('avatar_url')->label('تصویر آواتار')->nullable(),
+                                    ])->columns(2),
+                                Repeater::make('homepage.faqs')
+                                    ->label('پرسش‌های متداول')
+                                    ->schema([
+                                        TextInput::make('question')->label('سوال'),
+                                        Textarea::make('answer')->label('پاسخ')->rows(2),
+                                    ])->columns(2),
+                            ]),
+
+                            Section::make('سئو و شبکه‌های اجتماعی')->schema([
+                                TextInput::make('homepage.seo_title')->label('عنوان سئو صفحه')->placeholder('ثبت‌نام ریسلر VPN Market'),
+                                Textarea::make('homepage.seo_description')->label('توضیحات متا')->rows(2),
+                                TextInput::make('homepage.og_image_url')->label('تصویر Open Graph')->placeholder('https://...'),
+                            ])->columns(2),
                         ]),
 
                     Tabs\Tab::make('محتوای قالب اژدها')->icon('heroicon-o-fire')->visible(fn(Get $get) => $get('active_theme') === 'dragon')->schema([
@@ -348,12 +458,15 @@ class ThemeSettings extends Page implements HasForms
         foreach ($formData as $key => $value) {
             if (is_bool($value)) {
                 $value = $value ? '1' : '0';
+            } elseif (is_array($value)) {
+                $value = json_encode($value, JSON_UNESCAPED_UNICODE);
             }
 
             Setting::updateOrCreate(['key' => $key], ['value' => $value ?? '']);
         }
 
         PaymentMethodConfig::clearCache();
+        Setting::clearCache();
 
         Log::info('payment.card_to_card.enabled updated', [
             'admin_id' => Auth::id(),

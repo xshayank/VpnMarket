@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 
 class Setting extends Model
 {
@@ -19,6 +20,9 @@ class Setting extends Model
         'value',
     ];
 
+    private const CACHE_KEY = 'settings.map';
+    private const CACHE_TTL = 300; // 5 minutes
+
     public function inbounds()
     {
         return $this->hasMany(\App\Models\Inbound::class);
@@ -33,10 +37,33 @@ class Setting extends Model
     }
 
     /**
+     * Get all settings as a cached key/value collection
+     */
+    public static function getCachedMap()
+    {
+        return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, function () {
+            return self::all()->pluck('value', 'key');
+        });
+    }
+
+    /**
+     * Clear cached settings map
+     */
+    public static function clearCache(): void
+    {
+        Cache::forget(self::CACHE_KEY);
+    }
+
+    /**
      * Get a setting value by key
      */
     public static function getValue(string $key, $default = null)
     {
+        $cached = Cache::get(self::CACHE_KEY);
+        if ($cached && $cached->has($key)) {
+            return $cached->get($key, $default);
+        }
+
         $setting = self::where('key', $key)->first();
 
         return $setting ? $setting->value : $default;
@@ -48,6 +75,7 @@ class Setting extends Model
     public static function setValue(string $key, $value): void
     {
         self::updateOrCreate(['key' => $key], ['value' => $value]);
+        self::clearCache();
     }
 
     /**
