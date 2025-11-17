@@ -172,7 +172,7 @@ class EditReseller extends EditRecord
         }
 
         // For wallet resellers, validate panel change
-        if ($data['type'] === 'wallet' && isset($data['panel_id']) && $data['panel_id'] != $this->record->panel_id) {
+        if ($data['type'] === 'wallet' && isset($data['primary_panel_id']) && $data['primary_panel_id'] != $this->record->primary_panel_id) {
             // Check if reseller has active configs
             $activeConfigsCount = $this->record->configs()
                 ->whereIn('status', ['active', 'disabled'])
@@ -188,11 +188,23 @@ class EditReseller extends EditRecord
                         ->send()
                 );
             }
+            
+            // Log panel change for audit
+            \App\Models\AuditLog::log(
+                action: 'reseller_panel_changed',
+                targetType: 'reseller',
+                targetId: $this->record->id,
+                reason: 'admin_action',
+                meta: [
+                    'old_panel_id' => $this->record->primary_panel_id,
+                    'new_panel_id' => $data['primary_panel_id'],
+                ]
+            );
         }
 
         // Validate wallet reseller requirements
         if ($data['type'] === 'wallet') {
-            if (empty($data['panel_id'])) {
+            if (empty($data['primary_panel_id'])) {
                 throw new \Exception('Panel selection is required for wallet-based resellers.');
             }
 
@@ -202,7 +214,7 @@ class EditReseller extends EditRecord
 
             // Validate node selections belong to the selected panel
             if (! empty($data['eylandoo_allowed_node_ids'])) {
-                $panel = \App\Models\Panel::find($data['panel_id']);
+                $panel = \App\Models\Panel::find($data['primary_panel_id']);
                 if ($panel && $panel->panel_type === 'eylandoo') {
                     // Validate nodes exist in the panel
                     $validNodeIds = [];
