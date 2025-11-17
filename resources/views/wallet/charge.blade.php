@@ -1,7 +1,11 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-            شارژ کیف پول
+            @if($chargeMode === 'wallet')
+                شارژ کیف پول
+            @else
+                خرید ترافیک
+            @endif
         </h2>
     </x-slot>
 
@@ -28,6 +32,11 @@
                 <div
                     class="p-6 md:p-8 text-gray-900 dark:text-gray-100 text-right space-y-8"
                     x-data="walletChargePage(@js([
+                        'chargeMode' => $chargeMode ?? 'wallet',
+                        'isFirstTopup' => $isFirstTopup ?? false,
+                        'minAmount' => $minAmount ?? 50000,
+                        'minAmountGb' => $minAmountGb ?? 50,
+                        'trafficPricePerGb' => $trafficPricePerGb ?? 750,
                         'starsefarMinAmount' => (int) ($starsefarSettings['min_amount'] ?? 25000),
                         'starsefarEnabled' => (bool) ($starsefarSettings['enabled'] ?? false),
                         'cardEnabled' => (bool) $cardToCardEnabled,
@@ -41,15 +50,27 @@
                     ]))"
                     x-init="init()"
                 >
-                    {{-- نمایش موجودی فعلی --}}
+                    {{-- نمایش موجودی/ترافیک فعلی --}}
                     <div class="text-center">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">موجودی فعلی شما</p>
-                        <p class="font-bold text-3xl text-green-500 mt-1">
-                            {{ number_format($walletBalance ?? 0) }}
-                            <span class="text-lg font-normal">تومان</span>
-                        </p>
-                        @if(isset($isResellerWallet) && $isResellerWallet)
-                            <p class="text-xs text-gray-400 mt-1">موجودی کیف پول ریسلر</p>
+                        @if($chargeMode === 'wallet')
+                            <p class="text-sm text-gray-500 dark:text-gray-400">موجودی کیف پول</p>
+                            <p class="font-bold text-3xl text-green-500 mt-1">
+                                {{ number_format($walletBalance ?? 0) }}
+                                <span class="text-lg font-normal">تومان</span>
+                            </p>
+                            @if($isFirstTopup)
+                                <p class="text-xs text-amber-400 mt-2">⚠️ برای فعال‌سازی حداقل {{ number_format($minAmount) }} تومان شارژ کنید</p>
+                            @endif
+                        @else
+                            <p class="text-sm text-gray-500 dark:text-gray-400">ترافیک موجود</p>
+                            <p class="font-bold text-3xl text-blue-500 mt-1">
+                                {{ number_format($trafficTotalGb ?? 0, 2) }}
+                                <span class="text-lg font-normal">گیگابایت</span>
+                            </p>
+                            <p class="text-xs text-gray-400 mt-1">مصرف شده: {{ number_format($trafficUsedGb ?? 0, 2) }} GB</p>
+                            @if($isFirstTopup)
+                                <p class="text-xs text-amber-400 mt-2">⚠️ برای فعال‌سازی حداقل {{ number_format($minAmountGb) }} گیگابایت خریداری کنید</p>
+                            @endif
                         @endif
                     </div>
 
@@ -171,25 +192,62 @@
                             class="space-y-6"
                         >
                             @csrf
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <button type="button" @click="cardAmount = 50000" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۵۰,۰۰۰</button>
-                                <button type="button" @click="cardAmount = 100000" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۱۰۰,۰۰۰</button>
-                                <button type="button" @click="cardAmount = 250000" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۲۵۰,۰۰۰</button>
-                            </div>
+                            
+                            @if($chargeMode === 'wallet')
+                                {{-- Wallet Mode: Amount in Toman --}}
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <button type="button" @click="cardAmount = 50000" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۵۰,۰۰۰</button>
+                                    <button type="button" @click="cardAmount = 100000" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۱۰۰,۰۰۰</button>
+                                    <button type="button" @click="cardAmount = 250000" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۲۵۰,۰۰۰</button>
+                                </div>
 
-                            <div class="relative">
-                                <label for="amount" class="absolute -top-2 right-4 text-xs bg-white/50 dark:bg-gray-800/50 px-1 text-gray-500">یا مبلغ دلخواه را وارد کنید (تومان)</label>
-                                <input
-                                    id="amount"
-                                    name="amount"
-                                    x-model="cardAmount"
-                                    type="number"
-                                    class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                                    placeholder="حداقل ۱۰,۰۰۰"
-                                    min="10000"
-                                    required
-                                >
-                            </div>
+                                <div class="relative">
+                                    <label for="amount" class="absolute -top-2 right-4 text-xs bg-white/50 dark:bg-gray-800/50 px-1 text-gray-500">
+                                        مبلغ شارژ (تومان) - حداقل {{ number_format($minAmount) }}
+                                    </label>
+                                    <input
+                                        id="amount"
+                                        name="amount"
+                                        x-model="cardAmount"
+                                        type="number"
+                                        class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                                        :placeholder="'حداقل ' + {{ $minAmount }}"
+                                        min="{{ $minAmount }}"
+                                        required
+                                    >
+                                </div>
+                            @else
+                                {{-- Traffic Mode: Amount in GB --}}
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <button type="button" @click="trafficGb = 50" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۵۰ GB</button>
+                                    <button type="button" @click="trafficGb = 100" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۱۰۰ GB</button>
+                                    <button type="button" @click="trafficGb = 250" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۲۵۰ GB</button>
+                                </div>
+
+                                <div class="relative">
+                                    <label for="traffic_gb" class="absolute -top-2 right-4 text-xs bg-white/50 dark:bg-gray-800/50 px-1 text-gray-500">
+                                        مقدار ترافیک (گیگابایت) - حداقل {{ number_format($minAmountGb) }}
+                                    </label>
+                                    <input
+                                        id="traffic_gb"
+                                        name="traffic_gb"
+                                        x-model="trafficGb"
+                                        type="number"
+                                        step="0.1"
+                                        class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                                        :placeholder="'حداقل ' + {{ $minAmountGb }}"
+                                        min="{{ $minAmountGb }}"
+                                        required
+                                    >
+                                </div>
+
+                                <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                                    <p class="text-sm text-blue-800 dark:text-blue-300">
+                                        قیمت: <span x-text="Math.round((trafficGb || 0) * {{ $trafficPricePerGb }}).toLocaleString('fa-IR')"></span> تومان
+                                        <span class="text-xs">({{ number_format($trafficPricePerGb) }} تومان به ازای هر گیگابایت)</span>
+                                    </p>
+                                </div>
+                            @endif
 
                             <div class="mt-4">
                                 <label for="proof" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -253,7 +311,9 @@
             return {
                 method: null,
                 availableMethods: Array.isArray(config.availableMethods) ? config.availableMethods : [],
+                chargeMode: config.chargeMode || 'wallet',
                 cardAmount: @json(old('amount', '')),
+                trafficGb: @json(old('traffic_gb', '')),
                 starAmount: '',
                 starPhone: '',
                 tetraAmount: config.tetraDefaultAmount || '',
@@ -267,9 +327,18 @@
                 lastSuccessfulMethod: null,
                 init() {
                     this.method = this.resolveInitialMethod(config.defaultMethod);
-                    if (this.cardAmount === null) {
-                        this.cardAmount = '';
+                    
+                    // Set default amounts based on mode
+                    if (this.chargeMode === 'wallet') {
+                        if (this.cardAmount === null || this.cardAmount === '') {
+                            this.cardAmount = config.minAmount || 50000;
+                        }
+                    } else {
+                        if (this.trafficGb === null || this.trafficGb === '') {
+                            this.trafficGb = config.minAmountGb || 50;
+                        }
                     }
+                    
                     if (!this.starAmount && config.starsefarMinAmount) {
                         this.starAmount = config.starsefarMinAmount;
                     }
