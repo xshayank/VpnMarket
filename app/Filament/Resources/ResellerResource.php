@@ -67,9 +67,9 @@ class ResellerResource extends Resource
                 Forms\Components\Section::make('تنظیمات کیف پول')
                     ->visible(fn (Forms\Get $get) => $get('type') === 'wallet')
                     ->schema([
-                        Forms\Components\Select::make('panel_id')
+                        Forms\Components\Select::make('primary_panel_id')
                             ->label('پنل')
-                            ->relationship('panel', 'name')
+                            ->relationship('primaryPanel', 'name')
                             ->searchable()
                             ->preload()
                             ->live()
@@ -102,7 +102,7 @@ class ResellerResource extends Resource
                             ->description('سرویسهای مرزنشین مجاز برای این ریسلر')
                             ->collapsed()
                             ->visible(function (Forms\Get $get) {
-                                $panelId = $get('panel_id');
+                                $panelId = $get('primary_panel_id');
                                 if (! $panelId) {
                                     return false;
                                 }
@@ -115,7 +115,7 @@ class ResellerResource extends Resource
                                 Forms\Components\CheckboxList::make('marzneshin_allowed_service_ids')
                                     ->label('انتخاب سرویس‌ها')
                                     ->options(function (Forms\Get $get) {
-                                        $panelId = $get('panel_id');
+                                        $panelId = $get('primary_panel_id');
                                         if (! $panelId) {
                                             return [];
                                         }
@@ -158,7 +158,7 @@ class ResellerResource extends Resource
                         Forms\Components\Section::make('تنظیمات نودهای Eylandoo')
                             ->description('محدود کردن دسترسی ریسلر به نودهای خاص در پنل Eylandoo')
                             ->visible(function (Forms\Get $get) {
-                                $panelId = $get('panel_id');
+                                $panelId = $get('primary_panel_id');
                                 if (! $panelId) {
                                     return false;
                                 }
@@ -172,9 +172,9 @@ class ResellerResource extends Resource
                                     ->label('انتخاب نودها (اختیاری)')
                                     ->live()
                                     ->options(function (Forms\Get $get) {
-                                        $panelId = $get('panel_id');
+                                        $panelId = $get('primary_panel_id');
                                         if (! $panelId) {
-                                            \Illuminate\Support\Facades\Log::debug('Eylandoo nodes: No panel_id in form state');
+                                            \Illuminate\Support\Facades\Log::debug('Eylandoo nodes: No primary_panel_id in form state');
 
                                             return [];
                                         }
@@ -226,9 +226,9 @@ class ResellerResource extends Resource
                 Forms\Components\Section::make('تنظیمات ترافیک‌محور')
                     ->visible(fn (Forms\Get $get) => $get('type') === 'traffic')
                     ->schema([
-                        Forms\Components\Select::make('panel_id')
+                        Forms\Components\Select::make('primary_panel_id')
                             ->label('پنل')
-                            ->relationship('panel', 'name')
+                            ->relationship('primaryPanel', 'name')
                             ->searchable()
                             ->preload()
                             ->live()
@@ -273,7 +273,7 @@ class ResellerResource extends Resource
                             ->description('سرویسهای مرزنشین مجاز برای این ریسلر')
                             ->collapsed()
                             ->visible(function (Forms\Get $get) {
-                                $panelId = $get('panel_id');
+                                $panelId = $get('primary_panel_id');
                                 if (! $panelId) {
                                     return false;
                                 }
@@ -286,7 +286,7 @@ class ResellerResource extends Resource
                                 Forms\Components\CheckboxList::make('marzneshin_allowed_service_ids')
                                     ->label('انتخاب سرویس‌ها')
                                     ->options(function (Forms\Get $get) {
-                                        $panelId = $get('panel_id');
+                                        $panelId = $get('primary_panel_id');
                                         if (! $panelId) {
                                             return [];
                                         }
@@ -334,7 +334,7 @@ class ResellerResource extends Resource
                                     return false;
                                 }
 
-                                $panelId = $get('panel_id');
+                                $panelId = $get('primary_panel_id');
                                 if (! $panelId) {
                                     return false;
                                 }
@@ -348,9 +348,9 @@ class ResellerResource extends Resource
                                     ->label('انتخاب نودها (اختیاری)')
                                     ->live()
                                     ->options(function (Forms\Get $get) {
-                                        $panelId = $get('panel_id');
+                                        $panelId = $get('primary_panel_id');
                                         if (! $panelId) {
-                                            \Illuminate\Support\Facades\Log::debug('Eylandoo nodes: No panel_id in form state');
+                                            \Illuminate\Support\Facades\Log::debug('Eylandoo nodes: No primary_panel_id in form state');
 
                                             return [];
                                         }

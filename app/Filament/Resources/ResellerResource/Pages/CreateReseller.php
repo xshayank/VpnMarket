@@ -33,7 +33,7 @@ class CreateReseller extends CreateRecord
 
         // Validate wallet reseller requirements
         if ($data['type'] === 'wallet') {
-            if (empty($data['panel_id'])) {
+            if (empty($data['primary_panel_id'])) {
                 throw new \Exception('Panel selection is required for wallet-based resellers.');
             }
 
@@ -43,7 +43,7 @@ class CreateReseller extends CreateRecord
 
             // Validate node selections belong to the selected panel
             if (! empty($data['eylandoo_allowed_node_ids'])) {
-                $panel = \App\Models\Panel::find($data['panel_id']);
+                $panel = \App\Models\Panel::find($data['primary_panel_id']);
                 if ($panel && $panel->panel_type === 'eylandoo') {
                     // Validate nodes exist in the panel
                     $validNodeIds = [];

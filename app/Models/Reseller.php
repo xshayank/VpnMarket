@@ -109,9 +109,15 @@ class Reseller extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Legacy relationship for backward compatibility
+     * Maps to primary_panel_id
+     * 
+     * @deprecated Use primaryPanel() instead
+     */
     public function panel(): BelongsTo
     {
-        return $this->belongsTo(Panel::class);
+        return $this->belongsTo(Panel::class, 'primary_panel_id');
     }
 
     public function allowedPlans(): BelongsToMany
@@ -228,6 +234,34 @@ class Reseller extends Model
     public function primaryPanel(): BelongsTo
     {
         return $this->belongsTo(Panel::class, 'primary_panel_id');
+    }
+
+    /**
+     * Backward-compatible accessor for panel_id
+     * Maps to primary_panel_id
+     */
+    protected function panelId(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
+            get: fn ($value, $attributes) => $attributes['primary_panel_id'] ?? $value,
+            set: function ($value) {
+                // When panel_id is set, sync both fields
+                return [
+                    'primary_panel_id' => $value,
+                    'panel_id' => $value,
+                ];
+            }
+        );
+    }
+
+    /**
+     * Check if reseller has a primary panel assigned
+     * 
+     * @return bool
+     */
+    public function hasPrimaryPanel(): bool
+    {
+        return (bool) $this->primary_panel_id;
     }
 
     /**
