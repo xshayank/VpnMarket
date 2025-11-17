@@ -183,6 +183,4 @@ class Panel extends Model
 
         return $this->registration_default_service_ids ?? [];
     }
-        });
-    }
 }

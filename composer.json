@@ -64,6 +64,9 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
+        ],
+        "lint": [
+            "find app Modules routes config resources -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l"
         ]
     },
     "extra": {
