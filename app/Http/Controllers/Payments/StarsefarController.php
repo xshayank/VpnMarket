@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Payments;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ReenableResellerConfigsJob;
 use App\Models\PaymentGatewayTransaction;
 use App\Models\Reseller;
+use App\Models\Transaction;
 use App\Services\Payments\StarsEfarClient;
 use App\Services\WalletResellerReenableService;
 use App\Services\WalletService;
@@ -30,14 +32,31 @@ class StarsefarController extends Controller
             abort(SymfonyResponse::HTTP_FORBIDDEN, 'درگاه استارز فعال نیست.');
         }
 
-        $minAmount = StarsefarConfig::getMinAmountToman();
-
-        $validated = $request->validate([
-            'amount' => ['required', 'integer', 'min:'.$minAmount],
-            'phone' => ['nullable', 'string', 'max:64'],
-        ]);
-
         $user = Auth::user();
+        $reseller = $user->reseller;
+
+        $minAmount = StarsefarConfig::getMinAmountToman();
+        $chargeMode = $reseller && $reseller->isTrafficBased() ? 'traffic' : 'wallet';
+
+        $rules = [
+            'phone' => ['nullable', 'string', 'max:64'],
+        ];
+
+        if ($chargeMode === 'wallet') {
+            $rules['amount'] = ['required', 'integer', 'min:'.$minAmount];
+        } else {
+            $minAmountGb = $reseller && $reseller->isAnySuspended()
+                ? config('billing.min_first_traffic_topup_gb', config('billing.reseller.first_topup.traffic_min_gb', 250))
+                : config('billing.min_traffic_topup_gb', config('billing.reseller.min_topup.traffic_gb', 50));
+            $rules['traffic_gb'] = ['required', 'integer', 'min:'.$minAmountGb];
+        }
+
+        $validated = $request->validate($rules);
+
+        $trafficGb = $chargeMode === 'traffic' ? (int) ($validated['traffic_gb'] ?? 0) : null;
+        $amountToman = $chargeMode === 'traffic'
+            ? (int) ($trafficGb * config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750)))
+            : (int) $validated['amount'];
 
         try {
             $client = $this->makeClient();
@@ -57,7 +76,7 @@ class StarsefarController extends Controller
 
         try {
             $response = $client->createGiftLink(
-                (int) $validated['amount'],
+                $amountToman,
                 $targetAccount,
                 $callbackUrl
             );
@@ -98,7 +117,7 @@ class StarsefarController extends Controller
             'provider' => 'starsefar',
             'order_id' => $orderId,
             'user_id' => $user->id,
-            'amount_toman' => (int) $validated['amount'],
+            'amount_toman' => $amountToman,
             'stars' => Arr::get($response, 'data.stars'),
             'target_account' => $targetAccount,
             'status' => PaymentGatewayTransaction::STATUS_PENDING,
@@ -107,7 +126,23 @@ class StarsefarController extends Controller
                 'link' => $link,
                 'callback_url' => $callbackUrl,
                 'customer_phone' => $customerPhone,
+                'deposit_mode' => $chargeMode,
+                'traffic_gb' => $trafficGb,
+                'rate_per_gb' => config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750)),
+                'computed_amount_toman' => $amountToman,
+                'first_topup' => $reseller?->isAnySuspended() ?? false,
             ],
+        ]);
+
+        Log::info('traffic_topup_initiated', [
+            'action' => 'traffic_topup_initiated',
+            'reseller_id' => $reseller?->id,
+            'user_id' => $user->id,
+            'traffic_gb' => $trafficGb,
+            'rate_per_gb' => config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750)),
+            'amount_toman' => $amountToman,
+            'method' => 'starsefar',
+            'charge_mode' => $chargeMode,
         ]);
 
         Log::info('StarsEfar gift link created', [
@@ -213,75 +248,143 @@ class StarsefarController extends Controller
                 'amount' => $fresh->amount_toman,
             ]);
 
-            $walletTransaction = $this->walletService->credit(
-                $fresh->user,
-                $fresh->amount_toman,
-                'شارژ کیف پول (درگاه استارز تلگرام)',
-                [
-                    'gateway' => [
-                        'provider' => $fresh->provider,
-                        'order_id' => $fresh->order_id,
-                    ],
-                ]
-            );
-
-            Log::info('StarsEfar wallet credited', [
-                'action' => 'starsefar_wallet_credited',
-                'transaction_id' => $fresh->id,
-                'wallet_transaction_id' => $walletTransaction->id,
-                'user_id' => $fresh->user_id,
-                'amount' => $fresh->amount_toman,
-            ]);
-
             $meta = $fresh->meta ?? [];
+            $depositMode = $meta['deposit_mode'] ?? ($fresh->user?->reseller?->isTrafficBased() ? 'traffic' : 'wallet');
+            $gatewayMeta = [
+                'gateway' => [
+                    'provider' => $fresh->provider,
+                    'order_id' => $fresh->order_id,
+                ],
+            ];
+
+            if ($depositMode === 'traffic') {
+                $trafficGb = (int) ($meta['traffic_gb'] ?? 0);
+                $ratePerGb = (int) ($meta['rate_per_gb'] ?? config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750)));
+                $computedAmount = (int) ($meta['computed_amount_toman'] ?? $fresh->amount_toman);
+
+                $user = $fresh->user()->lockForUpdate()->first();
+                $reseller = $user?->reseller()->lockForUpdate()->first();
+
+                if ($reseller instanceof Reseller) {
+                    $bytes = (int) ($trafficGb * 1024 * 1024 * 1024);
+                    $reseller->traffic_total_bytes += $bytes;
+                    $reseller->save();
+
+                    $trafficTransaction = Transaction::create([
+                        'user_id' => $user->id,
+                        'amount' => $computedAmount,
+                        'type' => Transaction::TYPE_DEPOSIT,
+                        'status' => Transaction::STATUS_COMPLETED,
+                        'description' => 'خرید ترافیک (درگاه استارز تلگرام)',
+                        'metadata' => array_merge($gatewayMeta, [
+                            'deposit_mode' => 'traffic',
+                            'type' => Transaction::SUBTYPE_DEPOSIT_TRAFFIC,
+                            'traffic_gb' => $trafficGb,
+                            'rate_per_gb' => $ratePerGb,
+                            'computed_amount_toman' => $computedAmount,
+                            'payment_gateway_transaction_id' => $fresh->id,
+                        ]),
+                    ]);
+
+                    $meta['traffic_topup'] = [
+                        'transaction_id' => $trafficTransaction->id,
+                        'traffic_gb' => $trafficGb,
+                        'credited_bytes' => $bytes,
+                        'amount_toman' => $computedAmount,
+                    ];
+
+                    Log::info('traffic_topup_credited', [
+                        'action' => 'traffic_topup_credited',
+                        'reseller_id' => $reseller->id,
+                        'transaction_id' => $trafficTransaction->id,
+                        'payment_gateway_transaction_id' => $fresh->id,
+                        'traffic_gb' => $trafficGb,
+                        'amount_toman' => $computedAmount,
+                    ]);
+
+                    if ($reseller->isSuspendedTraffic()) {
+                        $reseller->status = 'active';
+                        $reseller->save();
+
+                        Log::info('reseller_activated_from_first_topup', [
+                            'action' => 'reseller_activated_from_first_topup',
+                            'reseller_id' => $reseller->id,
+                            'transaction_id' => $trafficTransaction->id,
+                            'traffic_gb' => $trafficGb,
+                        ]);
+
+                        dispatch(new ReenableResellerConfigsJob($reseller, 'traffic'));
+                    }
+                }
+            } else {
+                $walletTransaction = $this->walletService->credit(
+                    $fresh->user,
+                    $fresh->amount_toman,
+                    'شارژ کیف پول (درگاه استارز تلگرام)',
+                    array_merge($gatewayMeta, [
+                        'deposit_mode' => 'wallet',
+                        'computed_amount_toman' => $fresh->amount_toman,
+                    ])
+                );
+
+                Log::info('StarsEfar wallet credited', [
+                    'action' => 'starsefar_wallet_credited',
+                    'transaction_id' => $fresh->id,
+                    'wallet_transaction_id' => $walletTransaction->id,
+                    'user_id' => $fresh->user_id,
+                    'amount' => $fresh->amount_toman,
+                ]);
+
+                $meta['wallet_transaction_id'] = $walletTransaction->id;
+
+                // Check if user has a wallet-based reseller and handle reactivation
+                $user = $fresh->user;
+                $reseller = $user->reseller;
+
+                if ($reseller instanceof Reseller &&
+                    method_exists($reseller, 'isWalletBased') &&
+                    $reseller->isWalletBased()) {
+
+                    // Refresh reseller to get updated wallet balance
+                    $reseller->refresh();
+
+                    // Check if reseller was suspended and should be reactivated
+                    if (method_exists($reseller, 'isSuspendedWallet') &&
+                        $reseller->isSuspendedWallet() &&
+                        $reseller->wallet_balance > config('billing.wallet.suspension_threshold', -1000)) {
+
+                        Log::info('StarsEfar payment triggers reseller auto-reactivation', [
+                            'action' => 'starsefar_reseller_reactivation_start',
+                            'reseller_id' => $reseller->id,
+                            'user_id' => $user->id,
+                            'wallet_balance' => $reseller->wallet_balance,
+                            'suspension_threshold' => config('billing.wallet.suspension_threshold', -1000),
+                        ]);
+
+                        $reseller->update(['status' => 'active']);
+
+                        // Re-enable configs that were auto-disabled due to wallet suspension
+                        $reenableService = new WalletResellerReenableService();
+                        $reenableStats = $reenableService->reenableWalletSuspendedConfigs($reseller);
+
+                        Log::info('StarsEfar payment reseller reactivation completed', [
+                            'action' => 'starsefar_reseller_reactivation_complete',
+                            'reseller_id' => $reseller->id,
+                            'user_id' => $user->id,
+                            'configs_enabled' => $reenableStats['enabled'],
+                            'configs_failed' => $reenableStats['failed'],
+                        ]);
+                    }
+                }
+            }
+
             $meta['payload'] = $payload;
-            $meta['wallet_transaction_id'] = $walletTransaction->id;
 
             $fresh->update([
                 'status' => PaymentGatewayTransaction::STATUS_PAID,
                 'callback_received_at' => now(),
                 'meta' => $meta,
             ]);
-
-            // Check if user has a wallet-based reseller and handle reactivation
-            $user = $fresh->user;
-            $reseller = $user->reseller;
-
-            if ($reseller instanceof Reseller && 
-                method_exists($reseller, 'isWalletBased') && 
-                $reseller->isWalletBased()) {
-                
-                // Refresh reseller to get updated wallet balance
-                $reseller->refresh();
-
-                // Check if reseller was suspended and should be reactivated
-                if (method_exists($reseller, 'isSuspendedWallet') &&
-                    $reseller->isSuspendedWallet() &&
-                    $reseller->wallet_balance > config('billing.wallet.suspension_threshold', -1000)) {
-                    
-                    Log::info('StarsEfar payment triggers reseller auto-reactivation', [
-                        'action' => 'starsefar_reseller_reactivation_start',
-                        'reseller_id' => $reseller->id,
-                        'user_id' => $user->id,
-                        'wallet_balance' => $reseller->wallet_balance,
-                        'suspension_threshold' => config('billing.wallet.suspension_threshold', -1000),
-                    ]);
-
-                    $reseller->update(['status' => 'active']);
-
-                    // Re-enable configs that were auto-disabled due to wallet suspension
-                    $reenableService = new WalletResellerReenableService();
-                    $reenableStats = $reenableService->reenableWalletSuspendedConfigs($reseller);
-
-                    Log::info('StarsEfar payment reseller reactivation completed', [
-                        'action' => 'starsefar_reseller_reactivation_complete',
-                        'reseller_id' => $reseller->id,
-                        'user_id' => $user->id,
-                        'configs_enabled' => $reenableStats['enabled'],
-                        'configs_failed' => $reenableStats['failed'],
-                    ]);
-                }
-            }
         });
     }
 }

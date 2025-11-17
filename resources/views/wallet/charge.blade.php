@@ -224,28 +224,30 @@
                                     <button type="button" @click="trafficGb = 250" class="p-2 text-center bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-indigo-500 hover:text-white transition">۲۵۰ GB</button>
                                 </div>
 
-                                <div class="relative">
+                                <div class="relative space-y-2">
                                     <label for="traffic_gb" class="absolute -top-2 right-4 text-xs bg-white/50 dark:bg-gray-800/50 px-1 text-gray-500">
                                         مقدار ترافیک (گیگابایت) - حداقل {{ number_format($minAmountGb) }}
                                     </label>
                                     <input
                                         id="traffic_gb"
                                         name="traffic_gb"
-                                        x-model="trafficGb"
+                                        x-model.number="trafficGb"
                                         type="number"
-                                        step="0.1"
+                                        step="1"
                                         class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                                         :placeholder="'حداقل ' + {{ $minAmountGb }}"
                                         min="{{ $minAmountGb }}"
                                         required
                                     >
-                                </div>
 
-                                <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
-                                    <p class="text-sm text-blue-800 dark:text-blue-300">
-                                        قیمت: <span x-text="Math.round((trafficGb || 0) * {{ $trafficPricePerGb }}).toLocaleString('fa-IR')"></span> تومان
-                                        <span class="text-xs">({{ number_format($trafficPricePerGb) }} تومان به ازای هر گیگابایت)</span>
-                                    </p>
+                                    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 space-y-1 text-center">
+                                        <p class="text-sm text-blue-800 dark:text-blue-300">
+                                            نرخ هر گیگابایت: {{ number_format($trafficPricePerGb) }} تومان
+                                        </p>
+                                        <p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                                            مبلغ قابل پرداخت: <span x-text="trafficAmountToman().toLocaleString('fa-IR')"></span> تومان
+                                        </p>
+                                    </div>
                                 </div>
                             @endif
 
@@ -309,6 +311,7 @@
     <script>
         function walletChargePage(config) {
             return {
+                config,
                 method: null,
                 availableMethods: Array.isArray(config.availableMethods) ? config.availableMethods : [],
                 chargeMode: config.chargeMode || 'wallet',
@@ -426,6 +429,12 @@
                     this.logMethodEvent('retry_method', fallback);
                     this.method = fallback;
                 },
+                trafficAmountToman() {
+                    const gb = Number(this.trafficGb) || 0;
+                    const rate = Number(config.trafficPricePerGb) || 0;
+
+                    return Math.max(0, Math.round(gb * rate));
+                },
                 handleRenderError(reason, method = null) {
                     if (this.lastRenderErrorReason === reason && this.renderErrorMessage) {
                         return;
@@ -474,6 +483,16 @@
                     this.isInitiating = true;
 
                     try {
+                        const payload = {
+                            phone: this.starPhone || null,
+                        };
+
+                        if (this.chargeMode === 'wallet') {
+                            payload.amount = this.starAmount;
+                        } else {
+                            payload.traffic_gb = Number(this.trafficGb || 0);
+                        }
+
                         const response = await fetch('{{ route('wallet.charge.starsefar.initiate') }}', {
                             method: 'POST',
                             headers: {
@@ -481,10 +500,7 @@
                                 'Accept': 'application/json',
                                 'X-CSRF-TOKEN': config.csrfToken,
                             },
-                            body: JSON.stringify({
-                                amount: this.starAmount,
-                                phone: this.starPhone || null,
-                            }),
+                            body: JSON.stringify(payload),
                         });
 
                         const data = await response.json();

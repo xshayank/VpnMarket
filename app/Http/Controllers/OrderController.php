@@ -101,14 +101,14 @@ class OrderController extends Controller
         
         // Get minimum amounts based on first-time or subsequent top-up
         if ($chargeMode === 'wallet') {
-            $minAmount = $isFirstTopup 
+            $minAmount = $isFirstTopup
                 ? config('billing.reseller.first_topup.wallet_min', 150000)
                 : config('billing.reseller.min_topup.wallet', 50000);
         } else {
             $minAmountGb = $isFirstTopup
-                ? config('billing.reseller.first_topup.traffic_min_gb', 250)
-                : config('billing.reseller.min_topup.traffic_gb', 50);
-            $trafficPricePerGb = config('billing.reseller.traffic.price_per_gb', 750);
+                ? config('billing.min_first_traffic_topup_gb', config('billing.reseller.first_topup.traffic_min_gb', 250))
+                : config('billing.min_traffic_topup_gb', config('billing.reseller.min_topup.traffic_gb', 50));
+            $trafficPricePerGb = config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750));
         }
 
         $settings = Setting::all()->pluck('value', 'key');
@@ -209,7 +209,7 @@ class OrderController extends Controller
             $description = $isFirstTopup
                 ? "شارژ اولیه کیف پول ریسلر ({$amount} تومان - در انتظار تایید)"
                 : "شارژ کیف پول ریسلر ({$amount} تومان - در انتظار تایید)";
-            
+
             Log::info('topup_initiated_wallet', [
                 'user_id' => $user->id,
                 'reseller_id' => $reseller->id,
@@ -219,12 +219,12 @@ class OrderController extends Controller
         } else {
             // Traffic mode
             $minAmountGb = $isFirstTopup
-                ? config('billing.reseller.first_topup.traffic_min_gb', 250)
-                : config('billing.reseller.min_topup.traffic_gb', 50);
-            $trafficPricePerGb = config('billing.reseller.traffic.price_per_gb', 750);
+                ? config('billing.min_first_traffic_topup_gb', config('billing.reseller.first_topup.traffic_min_gb', 250))
+                : config('billing.min_traffic_topup_gb', config('billing.reseller.min_topup.traffic_gb', 50));
+            $trafficPricePerGb = config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750));
 
             $request->validate([
-                'traffic_gb' => ['required', 'numeric', "min:{$minAmountGb}"],
+                'traffic_gb' => ['required', 'integer', "min:{$minAmountGb}"],
                 'proof' => 'required|image|mimes:jpeg,png,webp,jpg|max:4096',
             ], [
                 'traffic_gb.min' => $isFirstTopup
@@ -232,7 +232,7 @@ class OrderController extends Controller
                     : "حداقل مقدار خرید {$minAmountGb} گیگابایت است.",
             ]);
 
-            $trafficGb = $request->traffic_gb;
+            $trafficGb = (int) $request->traffic_gb;
             $amount = (int) ($trafficGb * $trafficPricePerGb);
             $description = $isFirstTopup
                 ? "خرید اولیه ترافیک ({$trafficGb} گیگابایت - در انتظار تایید)"
@@ -268,13 +268,16 @@ class OrderController extends Controller
             // Create pending transaction immediately for admin approval
             $transactionMetadata = [
                 'charge_mode' => $chargeMode,
+                'deposit_mode' => $chargeMode,
                 'is_first_topup' => $isFirstTopup,
                 'reseller_id' => $reseller->id,
             ];
 
             if ($chargeMode === 'traffic') {
-                $transactionMetadata['traffic_gb'] = $request->traffic_gb;
+                $transactionMetadata['type'] = \App\Models\Transaction::SUBTYPE_DEPOSIT_TRAFFIC;
+                $transactionMetadata['traffic_gb'] = $trafficGb;
                 $transactionMetadata['price_per_gb'] = $trafficPricePerGb;
+                $transactionMetadata['computed_amount_toman'] = $amount;
             }
 
             $transaction = Transaction::create([

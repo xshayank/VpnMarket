@@ -2,7 +2,12 @@
     <h3 class="text-lg font-semibold text-center">درگاه پرداخت (Tetra98)</h3>
 
     <div class="bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-700 rounded-xl p-4 text-sm text-sky-800 dark:text-sky-100 space-y-2">
-        <p>شماره موبایل وارد شده باید با <strong>09</strong> شروع شده و ۱۱ رقم باشد.</p>
+        @if(($chargeMode ?? 'wallet') === 'traffic')
+            <p>مقدار ترافیک را به گیگابایت وارد کنید. مبلغ پرداختی به تومان محاسبه و برای درگاه ارسال می‌شود.</p>
+            <p>حداقل خرید ترافیک: {{ number_format($minAmountGb ?? 0) }} گیگابایت. نرخ هر گیگابایت: {{ number_format($trafficPricePerGb ?? 750) }} تومان.</p>
+        @else
+            <p>شماره موبایل وارد شده باید با <strong>09</strong> شروع شده و ۱۱ رقم باشد.</p>
+        @endif
         <p>پس از تکمیل فرم، به صفحه پرداخت Tetra98 هدایت می‌شوید. لطفاً تا تأیید پرداخت منتظر بمانید.</p>
     </div>
 
@@ -33,21 +38,42 @@
         @csrf
         <input type="hidden" name="tetra98_context" value="1">
 
-        <div class="relative">
-            <label for="tetra98-amount" class="absolute -top-2 right-4 text-xs bg-white/50 dark:bg-gray-800/50 px-1 text-gray-500">
-                مبلغ (تومان)
-            </label>
-            <input
-                id="tetra98-amount"
-                name="amount"
-                type="number"
-                min="{{ $tetraMinAmount }}"
-                x-model.number="tetraAmount"
-                value="{{ $tetraHasOldContext ? old('amount', $tetraMinAmount) : $tetraMinAmount }}"
-                class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-sky-200 dark:border-sky-500 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="حداقل {{ number_format($tetraMinAmount) }}"
-                required
-            >
+        <div class="relative space-y-2">
+            @if(($chargeMode ?? 'wallet') === 'traffic')
+                <label for="tetra98-traffic" class="absolute -top-2 right-4 text-xs bg-white/50 dark:bg-gray-800/50 px-1 text-gray-500">
+                    مقدار ترافیک (گیگابایت)
+                </label>
+                <input
+                    id="tetra98-traffic"
+                    name="traffic_gb"
+                    type="number"
+                    step="1"
+                    min="{{ (int) ($minAmountGb ?? 0) }}"
+                    x-model.number="trafficGb"
+                    value="{{ $tetraHasOldContext ? old('traffic_gb', $minAmountGb ?? 0) : ($minAmountGb ?? 0) }}"
+                    class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-sky-200 dark:border-sky-500 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="مثلاً 250"
+                    required
+                >
+                <p class="text-xs text-center text-sky-800 dark:text-sky-100">
+                    مبلغ قابل پرداخت: <span x-text="trafficAmountToman().toLocaleString('fa-IR')"></span> تومان
+                </p>
+            @else
+                <label for="tetra98-amount" class="absolute -top-2 right-4 text-xs bg-white/50 dark:bg-gray-800/50 px-1 text-gray-500">
+                    مبلغ (تومان)
+                </label>
+                <input
+                    id="tetra98-amount"
+                    name="amount"
+                    type="number"
+                    min="{{ $tetraMinAmount }}"
+                    x-model.number="tetraAmount"
+                    value="{{ $tetraHasOldContext ? old('amount', $tetraMinAmount) : $tetraMinAmount }}"
+                    class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-sky-200 dark:border-sky-500 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="حداقل {{ number_format($tetraMinAmount) }}"
+                    required
+                >
+            @endif
         </div>
 
         <div class="relative">
