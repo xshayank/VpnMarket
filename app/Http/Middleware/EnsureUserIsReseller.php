@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureUserIsReseller
@@ -25,10 +26,47 @@ class EnsureUserIsReseller
 
         $reseller = auth()->user()->reseller;
 
-        // For wallet-based suspended resellers, allow access (EnsureWalletAccess will redirect as needed)
-        // For traffic-based suspended resellers, block access
-        if ($reseller->isSuspended() && ! $reseller->isWalletBased()) {
-            abort(403, 'Your reseller account has been suspended. Please contact support.');
+        if (! $reseller) {
+            Log::warning('reseller_panel_redirect', [
+                'reason' => 'missing_reseller',
+                'user_id' => auth()->id(),
+            ]);
+
+            return redirect()->route('register')->with(
+                'error',
+                'حساب ریسلر برای شما ایجاد نشده است. لطفاً ثبت‌نام را کامل کنید یا با پشتیبانی تماس بگیرید.'
+            );
+        }
+
+        // For suspended resellers, redirect to charge page with clear messaging
+        if ($reseller->isSuspendedWallet() || $reseller->isSuspendedTraffic() || $reseller->isSuspended()) {
+            $walletMin = (int) config('billing.reseller.first_topup.wallet_min', 150000);
+            $trafficMin = (int) config('billing.reseller.first_topup.traffic_min_gb', 250);
+            $message = $reseller->isSuspendedTraffic()
+                ? "برای فعال‌سازی حساب، ابتدا حداقل ".number_format($trafficMin)." گیگابایت ترافیک خریداری کنید."
+                : "برای فعال‌سازی حساب، ابتدا حداقل ".number_format($walletMin)." تومان شارژ کنید.";
+
+            Log::info('reseller_panel_redirect', [
+                'reseller_id' => $reseller->id,
+                'status' => $reseller->status,
+                'type' => $reseller->type,
+            ]);
+
+            return redirect()->route('wallet.charge.form')->with('warning', $message);
+        }
+
+        if (! $reseller->hasPrimaryPanel()) {
+            Log::warning('reseller_panel_redirect', [
+                'reseller_id' => $reseller->id,
+                'status' => $reseller->status,
+                'type' => $reseller->type,
+                'reason' => 'missing_primary_panel',
+            ]);
+
+            return redirect()->route('wallet.charge.form')->with(
+                'warning',
+                'هیچ پنل فعالی برای شما تنظیم نشده است. لطفاً با پشتیبانی برای اختصاص پنل تماس بگیرید.'
+            );
         }
 
         return $next($request);
