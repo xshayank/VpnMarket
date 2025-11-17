@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Reseller;
+use App\Models\Panel;
 use App\Models\Setting;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
 
@@ -20,7 +23,17 @@ class RegisteredUserController extends Controller
      */
     public function create(): View
     {
-        return view('auth.register');
+        // Get active panels for reseller selection
+        $panels = Panel::where('is_active', true)->get();
+        
+        if ($panels->isEmpty()) {
+            abort(503, 'در حال حاضر هیچ پنل فعالی برای ثبت‌نام موجود نیست. لطفاً بعداً دوباره تلاش کنید.');
+        }
+
+        // Get settings for branding
+        $settings = Setting::all()->pluck('value', 'key');
+
+        return view('auth.register', compact('panels', 'settings'));
     }
 
     /**
@@ -30,42 +43,119 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        $request->validate([
+        Log::info('registration_start', [
+            'email' => $request->email,
+            'reseller_type' => $request->reseller_type,
+            'panel_id' => $request->primary_panel_id,
+            'ip' => $request->ip(),
+        ]);
+
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'reseller_type' => ['required', 'in:wallet,traffic'],
+            'primary_panel_id' => ['required', 'exists:panels,id'],
+            'selected_nodes' => ['nullable', 'array'], // For Eylandoo panels
+            'selected_nodes.*' => ['integer'],
+            'selected_services' => ['nullable', 'array'], // For Marzneshin panels
+            'selected_services.*' => ['integer'],
         ]);
 
+        // Create the user
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'ip_address' => $request->ip(), // ذخیره کردن IP کاربر
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'ip_address' => $request->ip(),
         ]);
 
+        // Get the selected panel
+        $panel = Panel::findOrFail($validated['primary_panel_id']);
+        $panelType = strtolower(trim($panel->panel_type ?? ''));
 
+        // Determine initial status based on reseller type
+        $initialStatus = $validated['reseller_type'] === 'wallet' 
+            ? 'suspended_wallet' 
+            : 'suspended_traffic';
+
+        // Prepare reseller data
+        $resellerData = [
+            'user_id' => $user->id,
+            'type' => $validated['reseller_type'],
+            'status' => $initialStatus,
+            'primary_panel_id' => $validated['primary_panel_id'],
+            'wallet_balance' => 0,
+            'traffic_total_bytes' => 0,
+            'traffic_used_bytes' => 0,
+            'meta' => [],
+        ];
+
+        // Set config limit based on type
+        if ($validated['reseller_type'] === 'wallet') {
+            $resellerData['max_configs'] = config('billing.reseller.config_limits.wallet', 1000);
+        } else {
+            $resellerData['max_configs'] = null; // Unlimited for traffic resellers
+        }
+
+        // Handle Eylandoo panel node selection
+        if ($panelType === 'eylandoo') {
+            $defaultNodes = $panel->getRegistrationDefaultNodeIds();
+            $selectedNodes = $request->input('selected_nodes', []);
+            
+            // Validate that selected nodes are subset of defaults
+            if (!empty($selectedNodes)) {
+                $validNodes = array_intersect($selectedNodes, $defaultNodes);
+                $resellerData['eylandoo_allowed_node_ids'] = array_values($validNodes);
+            } else {
+                $resellerData['eylandoo_allowed_node_ids'] = $defaultNodes;
+            }
+
+            $resellerData['meta']['eylandoo_allowed_node_ids'] = $resellerData['eylandoo_allowed_node_ids'];
+        }
+
+        // Handle Marzneshin panel service selection
+        if ($panelType === 'marzneshin') {
+            $defaultServices = $panel->getRegistrationDefaultServiceIds();
+            $selectedServices = $request->input('selected_services', []);
+            
+            // Validate that selected services are subset of defaults
+            if (!empty($selectedServices)) {
+                $validServices = array_intersect($selectedServices, $defaultServices);
+                $resellerData['marzneshin_allowed_service_ids'] = array_values($validServices);
+            } else {
+                $resellerData['marzneshin_allowed_service_ids'] = $defaultServices;
+            }
+
+            $resellerData['meta']['marzneshin_allowed_service_ids'] = $resellerData['marzneshin_allowed_service_ids'];
+        }
+
+        // Create the reseller record
+        $reseller = Reseller::create($resellerData);
+
+        Log::info('reseller_created', [
+            'user_id' => $user->id,
+            'reseller_id' => $reseller->id,
+            'type' => $validated['reseller_type'],
+            'initial_status' => $initialStatus,
+            'panel_id' => $validated['primary_panel_id'],
+            'panel_type' => $panelType,
+            'max_configs' => $resellerData['max_configs'],
+        ]);
+
+        // Handle referral if present
         if ($request->filled('ref')) {
             $referrer = User::where('referral_code', $request->ref)->first();
             if ($referrer) {
                 $user->referrer_id = $referrer->id;
                 $user->save();
 
-                // هدیه خوش‌آمدگویی را از تنظیمات بخوان
-                $settings = Setting::all()->pluck('value', 'key');
-                $welcomeGift = (int) $settings->get('referral_welcome_gift', 0);
-
-                if ($welcomeGift > 0) {
-
-                    $existingUserWithSameIp = User::where('ip_address', $request->ip())
-                        ->where('id', '!=', $user->id)
-                        ->where('balance', '>=', $welcomeGift)
-                        ->exists();
-
-                    if (!$existingUserWithSameIp) {
-                        $user->increment('balance', $welcomeGift);
-                    }
-
-                }
+                // Note: Welcome gift is disabled for reseller-only architecture
+                // Resellers must make first top-up to activate
+                Log::info('referral_registered', [
+                    'new_user_id' => $user->id,
+                    'referrer_id' => $referrer->id,
+                ]);
             }
         }
 
@@ -73,7 +163,16 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        return redirect()->route('dashboard');
+        Log::info('registration_complete', [
+            'user_id' => $user->id,
+            'reseller_id' => $reseller->id,
+        ]);
+
+        // Redirect to wallet charge page with appropriate message
+        $message = $validated['reseller_type'] === 'wallet'
+            ? 'حساب شما با موفقیت ایجاد شد! برای فعال‌سازی، لطفاً حداقل ۱۵۰,۰۰۰ تومان شارژ کنید.'
+            : 'حساب شما با موفقیت ایجاد شد! برای فعال‌سازی، لطفاً حداقل ۲۵۰ گیگابایت ترافیک خریداری کنید.';
+
+        return redirect()->route('wallet.charge.form')->with('status', $message);
     }
 }
-
