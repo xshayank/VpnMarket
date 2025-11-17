@@ -63,6 +63,11 @@
 </head>
 <body class="modern-auth-body">
 
+@php
+    $initialResellerType = old('reseller_type', $defaultResellerType ?? '');
+    $initialPanelId = old('primary_panel_id', $defaultPanelId ?? '');
+@endphp
+
 <!-- Floating particles -->
 <div class="particle"></div>
 <div class="particle"></div>
@@ -80,7 +85,7 @@
     <div class="auth-logo">{{ $settings->get('auth_brand_name', 'ARV') }}</div>
     <h2 class="auth-title">ایجاد حساب کاربری جدید</h2>
 
-    <form method="POST" action="{{ route('register') }}" x-data="registrationForm(@js($panels))" x-init="init()">
+    <form method="POST" action="{{ route('register') }}" x-data="registrationForm(@js($panels), @js($initialResellerType), @js($initialPanelId))" x-init="init()">
         @csrf
 
         @if(request()->has('ref'))
@@ -180,10 +185,10 @@
 </div>
 
 <script>
-function registrationForm(panels) {
+function registrationForm(panels, defaultType, defaultPanelId) {
     return {
-        resellerType: '{{ old("reseller_type") }}',
-        selectedPanelId: '{{ old("primary_panel_id") }}',
+        resellerType: defaultType || '',
+        selectedPanelId: defaultPanelId || '',
         selectedPanelType: '',
         availableNodes: [],
         availableServices: [],

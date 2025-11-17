@@ -5,6 +5,7 @@ use App\Http\Controllers\Payments\StarsefarController;
 use App\Http\Controllers\Payments\Tetra98Controller;
 use App\Http\Controllers\ProfileController;
 use App\Models\Order;
+use App\Models\Panel;
 use App\Models\Plan;
 use App\Models\Setting;
 use App\Models\User;
@@ -22,16 +23,88 @@ use Modules\TelegramBot\Http\Controllers\WebhookController as TelegramWebhookCon
 */
 
 Route::get('/', function () {
-    $settings = Setting::all()->pluck('value', 'key');
-    $plans = Plan::where('is_active', true)->orderBy('price')->get();
-    $activeTheme = $settings->get('active_theme', 'welcome');
+    $settings = Setting::getCachedMap();
 
-    if (!view()->exists("themes.{$activeTheme}")) {
-        abort(404, "قالب '{$activeTheme}' یافت نشد.");
+    $decodeJson = function (string $key) use ($settings) {
+        $raw = $settings->get($key);
+        return $raw ? (json_decode($raw, true) ?: []) : [];
+    };
+
+    $boolSetting = function (string $key, bool $default = false) use ($settings) {
+        return filter_var($settings->get($key, $default ? '1' : '0'), FILTER_VALIDATE_BOOLEAN);
+    };
+
+    $defaultResellerType = $settings->get('homepage.default_reseller_type', 'wallet');
+    $defaultResellerType = in_array($defaultResellerType, ['wallet', 'traffic'], true) ? $defaultResellerType : 'wallet';
+    $defaultPanelId = $settings->get('homepage.default_panel_id');
+
+    $homepage = [
+        'hero_title' => $settings->get('homepage.hero_title', 'به جمع ریسلرهای VPN Market بپیوندید'),
+        'hero_subtitle' => $settings->get('homepage.hero_subtitle', 'OpenVPN و V2Ray با تحویل سریع، پایداری بالا و پشتیبانی اختصاصی'),
+        'hero_media_url' => $settings->get('homepage.hero_media_url'),
+        'primary_cta_text' => $settings->get('homepage.primary_cta_text', 'شروع به عنوان ریسلر'),
+        'secondary_cta_text' => $settings->get('homepage.secondary_cta_text', 'مشاهده پلن‌ها'),
+        'show_panels' => $boolSetting('homepage.show_panels', true),
+        'show_plans' => $boolSetting('homepage.show_plans', true),
+        'show_testimonials' => $boolSetting('homepage.show_testimonials', false),
+        'show_faq' => $boolSetting('homepage.show_faq', true),
+        'trust_badges' => $decodeJson('homepage.trust_badges'),
+        'features' => $decodeJson('homepage.features'),
+        'testimonials' => $decodeJson('homepage.testimonials'),
+        'faqs' => $decodeJson('homepage.faqs'),
+        'seo_title' => $settings->get('homepage.seo_title', config('app.name', 'VPN Market')), 
+        'seo_description' => $settings->get('homepage.seo_description', 'ثبت‌نام سریع ریسلر VPN؛ اتصال امن و پایدار با پشتیبانی لحظه‌ای.'),
+        'og_image_url' => $settings->get('homepage.og_image_url'),
+        'default_reseller_type' => $defaultResellerType,
+        'default_panel_id' => $defaultPanelId,
+    ];
+
+    if (empty($homepage['trust_badges'])) {
+        $homepage['trust_badges'] = [
+            ['icon' => '⏱️', 'label' => 'تحویل اکانت', 'value' => '< 5 دقیقه'],
+            ['icon' => '📈', 'label' => 'میزان رضایت', 'value' => '۹۸٪ ریسلرها'],
+            ['icon' => '🛡️', 'label' => 'پایداری شبکه', 'value' => '۹۹.۹٪ آپتایم'],
+        ];
     }
 
-    return view("themes.{$activeTheme}", ['settings' => $settings, 'plans' => $plans]);
+    if (empty($homepage['features'])) {
+        $homepage['features'] = [
+            ['icon' => '🚀', 'title' => 'اتصال پرسرعت', 'description' => 'زیرساخت بهینه‌شده برای ایران با پینگ کم و تحویل سریع کانفیگ‌ها.'],
+            ['icon' => '🧠', 'title' => 'مدیریت هوشمند', 'description' => 'محدودیت و سهمیه‌بندی خودکار برای اطمینان از سلامت نودها و حساب‌ها.'],
+            ['icon' => '🤝', 'title' => 'پشتیبانی ویژه ریسلر', 'description' => 'پاسخ‌گویی سریع و راهنمای توسعه کسب‌وکار شما در هر مرحله.'],
+        ];
+    }
+
+    if (empty($homepage['faqs'])) {
+        $homepage['faqs'] = [
+            ['question' => 'چطور فعال می‌شوم؟', 'answer' => 'ثبت‌نام کنید، نوع ریسلر را انتخاب کنید و اولین شارژ را انجام دهید. فعال‌سازی کمتر از ۵ دقیقه طول می‌کشد.'],
+            ['question' => 'تفاوت کیف پول و ترافیک چیست؟', 'answer' => 'ریسلر کیف پول بر اساس تعداد کانفیگ محدود است؛ ریسلر ترافیک محدودیتی در تعداد کانفیگ ندارد و بر اساس حجم مصرفی محاسبه می‌شود.'],
+        ];
+    }
+
+    $panels = Panel::where('is_active', true)->get();
+    $plans = Plan::where('is_active', true)->orderBy('price')->take(6)->get();
+
+    return view('landing.index', [
+        'settings' => $settings,
+        'homepage' => $homepage,
+        'panels' => $panels,
+        'plans' => $plans,
+    ]);
 })->name('home');
+
+Route::get('/legacy-home', function () {
+    $settings = Setting::getCachedMap();
+    $plans = Plan::where('is_active', true)->orderBy('price')->get();
+    $activeTheme = $settings->get('active_theme', 'welcome');
+    $view = "themes.{$activeTheme}";
+
+    if (!view()->exists($view)) {
+        return view('welcome', ['settings' => $settings, 'plans' => $plans]);
+    }
+
+    return view($view, ['settings' => $settings, 'plans' => $plans]);
+})->name('legacy-home');
 
 
 Route::middleware(['auth'])->group(function () {

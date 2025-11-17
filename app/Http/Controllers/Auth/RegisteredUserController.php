@@ -27,15 +27,27 @@ class RegisteredUserController extends Controller
         try {
             // Get active panels for reseller selection
             $panels = Panel::where('is_active', true)->get();
-            
+
             if ($panels->isEmpty()) {
                 abort(503, 'در حال حاضر هیچ پنل فعالی برای ثبت‌نام موجود نیست. لطفاً بعداً دوباره تلاش کنید.');
             }
 
-            // Get settings for branding
-            $settings = Setting::all()->pluck('value', 'key');
+            // Get settings for branding and defaults
+            $settings = Setting::getCachedMap();
+            $defaultResellerType = request('reseller_type', $settings->get('homepage.default_reseller_type'));
+            $defaultResellerType = in_array($defaultResellerType, ['wallet', 'traffic'], true) ? $defaultResellerType : null;
 
-            return view('auth.register', compact('panels', 'settings'));
+            $defaultPanelId = request('primary_panel_id', $settings->get('homepage.default_panel_id'));
+            if ($defaultPanelId && !$panels->pluck('id')->contains((int) $defaultPanelId)) {
+                $defaultPanelId = null;
+            }
+
+            return view('auth.register', [
+                'panels' => $panels,
+                'settings' => $settings,
+                'defaultResellerType' => $defaultResellerType,
+                'defaultPanelId' => $defaultPanelId,
+            ]);
         } catch (\Throwable $e) {
             // Log model autoload or other critical errors
             Log::error('Registration page failed to load: ' . $e->getMessage(), [
