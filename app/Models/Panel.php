@@ -20,11 +20,15 @@ class Panel extends Model
         'api_token',
         'extra',
         'is_active',
+        'registration_default_node_ids',
+        'registration_default_service_ids',
     ];
 
     protected $casts = [
         'extra' => 'array',
         'is_active' => 'boolean',
+        'registration_default_node_ids' => 'array',
+        'registration_default_service_ids' => 'array',
     ];
 
     protected $hidden = [
@@ -149,6 +153,36 @@ class Panel extends Model
                 ]);
                 return [];
             }
+        });
+    }
+
+    /**
+     * Get registration default node IDs for Eylandoo panels
+     *
+     * @return array
+     */
+    public function getRegistrationDefaultNodeIds(): array
+    {
+        if (strtolower(trim($this->panel_type ?? '')) !== 'eylandoo') {
+            return [];
+        }
+
+        return $this->registration_default_node_ids ?? [];
+    }
+
+    /**
+     * Get registration default service IDs for Marzneshin panels
+     *
+     * @return array
+     */
+    public function getRegistrationDefaultServiceIds(): array
+    {
+        if (strtolower(trim($this->panel_type ?? '')) !== 'marzneshin') {
+            return [];
+        }
+
+        return $this->registration_default_service_ids ?? [];
+    }
         });
     }
 }
