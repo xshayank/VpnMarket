@@ -149,6 +149,32 @@ class RegisteredUserController extends Controller
         // Create the reseller record
         $reseller = Reseller::create($resellerData);
 
+        // Log defaults application
+        if ($panelType === 'eylandoo' && !empty($resellerData['eylandoo_allowed_node_ids'])) {
+            Log::info('registration_defaults_applied', [
+                'reseller_id' => $reseller->id,
+                'panel_id' => $validated['primary_panel_id'],
+                'panel_type' => 'eylandoo',
+                'default_node_count' => count($resellerData['eylandoo_allowed_node_ids']),
+                'node_ids' => $resellerData['eylandoo_allowed_node_ids'],
+            ]);
+        } elseif ($panelType === 'marzneshin' && !empty($resellerData['marzneshin_allowed_service_ids'])) {
+            Log::info('registration_defaults_applied', [
+                'reseller_id' => $reseller->id,
+                'panel_id' => $validated['primary_panel_id'],
+                'panel_type' => 'marzneshin',
+                'default_service_count' => count($resellerData['marzneshin_allowed_service_ids']),
+                'service_ids' => $resellerData['marzneshin_allowed_service_ids'],
+            ]);
+        } elseif (in_array($panelType, ['eylandoo', 'marzneshin'])) {
+            Log::info('registration_defaults_none', [
+                'reseller_id' => $reseller->id,
+                'panel_id' => $validated['primary_panel_id'],
+                'panel_type' => $panelType,
+                'reason' => 'no_defaults_configured',
+            ]);
+        }
+
         Log::info('reseller_created', [
             'user_id' => $user->id,
             'reseller_id' => $reseller->id,

@@ -70,6 +70,56 @@ class PanelResource extends Resource
                 Forms\Components\Toggle::make('is_active')
                     ->label('فعال')
                     ->default(true),
+                
+                // Eylandoo panel: Default Nodes for New Resellers
+                Forms\Components\Select::make('registration_default_node_ids')
+                    ->label('نودهای پیش‌فرض برای نمایندگان جدید (Eylandoo)')
+                    ->multiple()
+                    ->searchable()
+                    ->visible(fn ($get) => strtolower(trim($get('panel_type') ?? '')) === 'eylandoo')
+                    ->options(function ($record) {
+                        if (!$record || strtolower(trim($record->panel_type ?? '')) !== 'eylandoo') {
+                            return [];
+                        }
+                        
+                        try {
+                            $nodes = $record->getCachedEylandooNodes();
+                            $options = [];
+                            foreach ($nodes as $node) {
+                                $options[$node['id']] = $node['name'];
+                            }
+                            return $options;
+                        } catch (\Exception $e) {
+                            return [];
+                        }
+                    })
+                    ->helperText('نودهایی که به صورت خودکار به نمایندگان جدید اختصاص داده می‌شوند. در صورت خطا در دریافت لیست نودها، این فیلد خالی خواهد بود.')
+                    ->placeholder('انتخاب نودهای پیش‌فرض'),
+                
+                // Marzneshin panel: Default Services for New Resellers
+                Forms\Components\Select::make('registration_default_service_ids')
+                    ->label('سرویس‌های پیش‌فرض برای نمایندگان جدید (Marzneshin)')
+                    ->multiple()
+                    ->searchable()
+                    ->visible(fn ($get) => strtolower(trim($get('panel_type') ?? '')) === 'marzneshin')
+                    ->options(function ($record) {
+                        if (!$record || strtolower(trim($record->panel_type ?? '')) !== 'marzneshin') {
+                            return [];
+                        }
+                        
+                        try {
+                            $services = $record->getCachedMarzneshinServices();
+                            $options = [];
+                            foreach ($services as $service) {
+                                $options[$service['id']] = $service['name'];
+                            }
+                            return $options;
+                        } catch (\Exception $e) {
+                            return [];
+                        }
+                    })
+                    ->helperText('سرویس‌هایی که به صورت خودکار به نمایندگان جدید اختصاص داده می‌شوند. در صورت خطا در دریافت لیست سرویس‌ها، این فیلد خالی خواهد بود.')
+                    ->placeholder('انتخاب سرویس‌های پیش‌فرض'),
             ]);
     }
 
