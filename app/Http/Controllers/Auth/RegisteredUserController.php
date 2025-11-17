@@ -10,6 +10,7 @@ use App\Models\Setting;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -21,19 +22,34 @@ class RegisteredUserController extends Controller
     /**
      * Display the registration view.
      */
-    public function create(): View
+    public function create(): View|Response
     {
-        // Get active panels for reseller selection
-        $panels = Panel::where('is_active', true)->get();
-        
-        if ($panels->isEmpty()) {
-            abort(503, 'در حال حاضر هیچ پنل فعالی برای ثبت‌نام موجود نیست. لطفاً بعداً دوباره تلاش کنید.');
+        try {
+            // Get active panels for reseller selection
+            $panels = Panel::where('is_active', true)->get();
+            
+            if ($panels->isEmpty()) {
+                abort(503, 'در حال حاضر هیچ پنل فعالی برای ثبت‌نام موجود نیست. لطفاً بعداً دوباره تلاش کنید.');
+            }
+
+            // Get settings for branding
+            $settings = Setting::all()->pluck('value', 'key');
+
+            return view('auth.register', compact('panels', 'settings'));
+        } catch (\Throwable $e) {
+            // Log model autoload or other critical errors
+            Log::error('Registration page failed to load: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            
+            // Return a graceful 503 error instead of raw exception
+            return response()->view('errors.503', [
+                'message' => 'مشکل موقت در بارگذاری پنلها. لطفاً بعداً تلاش کنید.'
+            ], 503);
         }
-
-        // Get settings for branding
-        $settings = Setting::all()->pluck('value', 'key');
-
-        return view('auth.register', compact('panels', 'settings'));
     }
 
     /**
