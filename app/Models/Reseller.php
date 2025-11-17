@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -403,5 +404,52 @@ class Reseller extends Model
         }
 
         return $now->diffInDays($windowEnd);
+    }
+
+    /**
+     * Format a nullable date as Y-m-d or return a fallback string when null.
+     */
+    private function formatDateLabel(?CarbonInterface $date, string $fallback = 'بدون محدودیت زمانی'): string
+    {
+        return $date?->format('Y-m-d') ?? $fallback;
+    }
+
+    /**
+     * Get a human-friendly expiry label for dashboards and views.
+     */
+    public function getExpiryLabelAttribute(): string
+    {
+        return $this->formatDateLabel($this->expires_at);
+    }
+
+    /**
+     * Get a human-friendly start date label for the reseller window.
+     */
+    public function getWindowStartLabelAttribute(): string
+    {
+        return $this->formatDateLabel($this->window_starts_at);
+    }
+
+    /**
+     * Get a human-friendly end date label for the reseller window.
+     */
+    public function getWindowEndLabelAttribute(): string
+    {
+        return $this->formatDateLabel($this->window_ends_at);
+    }
+
+    /**
+     * Get a combined window range label or a fallback when dates are missing.
+     */
+    public function getWindowRangeLabelAttribute(): string
+    {
+        if ($this->window_starts_at && $this->window_ends_at) {
+            return sprintf('از %s تا %s',
+                $this->window_starts_at->format('Y-m-d'),
+                $this->window_ends_at->format('Y-m-d')
+            );
+        }
+
+        return 'بدون بازه زمانی';
     }
 }

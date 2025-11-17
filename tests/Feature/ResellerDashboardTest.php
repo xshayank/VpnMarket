@@ -1,7 +1,12 @@
 <?php
 
 use App\Models\Reseller;
+use App\Models\Panel;
 use App\Models\User;
+
+beforeEach(function () {
+    $this->panel = Panel::factory()->create();
+});
 
 test('non reseller cannot access reseller dashboard', function () {
     $user = User::factory()->create();
@@ -17,6 +22,8 @@ test('plan based reseller can access dashboard', function () {
         'user_id' => $user->id,
         'type' => 'plan',
         'status' => 'active',
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
     ]);
 
     $response = $this->actingAs($user)->get('/reseller');
@@ -36,6 +43,8 @@ test('traffic based reseller can access dashboard', function () {
         'traffic_total_bytes' => 100 * 1024 * 1024 * 1024,
         'window_starts_at' => now(),
         'window_ends_at' => now()->addDays(30),
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
     ]);
 
     $response = $this->actingAs($user)->get('/reseller');
@@ -44,17 +53,38 @@ test('traffic based reseller can access dashboard', function () {
     $response->assertViewIs('reseller::dashboard');
 });
 
+test('traffic based reseller with no time limits sees fallback labels', function () {
+    $user = User::factory()->create();
+    Reseller::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'traffic',
+        'status' => 'active',
+        'traffic_total_bytes' => 50 * 1024 * 1024 * 1024,
+        'window_starts_at' => null,
+        'window_ends_at' => null,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
+    ]);
+
+    $response = $this->actingAs($user)->get('/reseller');
+
+    $response->assertStatus(200);
+    $response->assertSee('بدون محدودیت زمانی', false);
+});
+
 test('suspended reseller cannot access dashboard', function () {
     $user = User::factory()->create();
     Reseller::factory()->create([
         'user_id' => $user->id,
         'type' => 'plan',
         'status' => 'suspended',
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
     ]);
 
     $response = $this->actingAs($user)->get('/reseller');
 
-    $response->assertStatus(403);
+    $response->assertRedirect(route('wallet.charge.form'));
 });
 
 test('traffic based reseller with unlimited config limit shows نامحدود', function () {
@@ -67,6 +97,8 @@ test('traffic based reseller with unlimited config limit shows نامحدود', 
         'window_starts_at' => now(),
         'window_ends_at' => now()->addDays(30),
         'config_limit' => null,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
     ]);
 
     $response = $this->actingAs($user)->get('/reseller');
@@ -88,6 +120,8 @@ test('traffic based reseller with zero config limit shows نامحدود', funct
         'window_starts_at' => now(),
         'window_ends_at' => now()->addDays(30),
         'config_limit' => 0,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
     ]);
 
     $response = $this->actingAs($user)->get('/reseller');
@@ -109,6 +143,8 @@ test('traffic based reseller with config limit shows remaining count', function 
         'window_starts_at' => now(),
         'window_ends_at' => now()->addDays(30),
         'config_limit' => 10,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
     ]);
 
     // Create 7 configs for this reseller
@@ -140,6 +176,8 @@ test('traffic based reseller with all configs used shows zero remaining', functi
         'window_starts_at' => now(),
         'window_ends_at' => now()->addDays(30),
         'config_limit' => 5,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
     ]);
 
     // Create 5 configs (all used up)
@@ -169,6 +207,8 @@ test('soft deleted configs do not reduce remaining count', function () {
         'window_starts_at' => now(),
         'window_ends_at' => now()->addDays(30),
         'config_limit' => 10,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
     ]);
 
     // Create 5 active configs
