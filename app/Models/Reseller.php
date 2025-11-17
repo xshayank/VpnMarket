@@ -25,7 +25,9 @@ class Reseller extends Model
         'status',
         'username_prefix',
         'panel_id',
+        'primary_panel_id',
         'config_limit',
+        'max_configs',
         'traffic_total_bytes',
         'traffic_used_bytes',
         'admin_forgiven_bytes',
@@ -34,12 +36,14 @@ class Reseller extends Model
         'marzneshin_allowed_service_ids',
         'eylandoo_allowed_node_ids',
         'settings',
+        'meta',
         'wallet_balance',
         'wallet_price_per_gb',
     ];
 
     protected $casts = [
         'config_limit' => 'integer',
+        'max_configs' => 'integer',
         'traffic_total_bytes' => 'integer',
         'traffic_used_bytes' => 'integer',
         'admin_forgiven_bytes' => 'integer',
@@ -48,6 +52,7 @@ class Reseller extends Model
         'marzneshin_allowed_service_ids' => 'array',
         'eylandoo_allowed_node_ids' => 'array',
         'settings' => 'array',
+        'meta' => 'array',
         'wallet_balance' => 'integer',
         'wallet_price_per_gb' => 'integer',
     ];
@@ -187,6 +192,63 @@ class Reseller extends Model
     public function isSuspendedWallet(): bool
     {
         return $this->status === 'suspended_wallet';
+    }
+
+    public function isSuspendedTraffic(): bool
+    {
+        return $this->status === 'suspended_traffic';
+    }
+
+    public function isSuspendedOther(): bool
+    {
+        return $this->status === 'suspended_other';
+    }
+
+    public function isDisabled(): bool
+    {
+        return $this->status === 'disabled';
+    }
+
+    /**
+     * Check if reseller is suspended for any reason
+     */
+    public function isAnySuspended(): bool
+    {
+        return in_array($this->status, [
+            'suspended',
+            'suspended_wallet',
+            'suspended_traffic',
+            'suspended_other'
+        ], true);
+    }
+
+    /**
+     * Get the primary panel for this reseller
+     */
+    public function primaryPanel(): BelongsTo
+    {
+        return $this->belongsTo(Panel::class, 'primary_panel_id');
+    }
+
+    /**
+     * Get the effective config limit based on reseller type
+     */
+    public function getEffectiveConfigLimit(): ?int
+    {
+        // Use max_configs if set, otherwise fall back to type-based defaults
+        if ($this->max_configs !== null) {
+            return $this->max_configs;
+        }
+
+        if ($this->isWalletBased()) {
+            return config('billing.reseller.config_limits.wallet', 1000);
+        }
+
+        if ($this->isTrafficBased()) {
+            return config('billing.reseller.config_limits.traffic'); // null = unlimited
+        }
+
+        return $this->config_limit;
     }
 
     public function hasTrafficRemaining(): bool

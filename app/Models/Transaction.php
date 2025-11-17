@@ -40,6 +40,10 @@ class Transaction extends Model
     public const TYPE_PURCHASE  = 'purchase';
     public const TYPE_REFUND    = 'refund';
     public const TYPE_WITHDRAWAL= 'withdrawal';
+    
+    // Deposit subtypes for reseller-only architecture
+    public const SUBTYPE_DEPOSIT_WALLET = 'deposit_wallet';
+    public const SUBTYPE_DEPOSIT_TRAFFIC = 'deposit_traffic';
 
     /**
      * ثابت‌ها برای وضعیت‌های تراکنش

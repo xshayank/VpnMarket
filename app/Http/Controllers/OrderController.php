@@ -80,11 +80,36 @@ class OrderController extends Controller
         $user = Auth::user();
         $reseller = $user->reseller;
 
-        // For wallet-based resellers, show their reseller wallet balance
-        // For other users, show their user balance
-        $walletBalance = $reseller && $reseller->isWalletBased()
-            ? $reseller->wallet_balance
-            : $user->balance;
+        // Ensure user has a reseller record (reseller-only architecture)
+        if (!$reseller) {
+            Log::error('User without reseller record attempted wallet charge', [
+                'user_id' => $user->id,
+            ]);
+            return redirect()->route('dashboard')->with('error', 'حساب شما به درستی پیکربندی نشده است. لطفاً با پشتیبانی تماس بگیرید.');
+        }
+
+        // Determine charge mode (wallet or traffic)
+        $chargeMode = $reseller->isWalletBased() ? 'wallet' : 'traffic';
+        
+        // Get balance/traffic info
+        $walletBalance = $reseller->wallet_balance;
+        $trafficTotalGb = $reseller->traffic_total_bytes ? round($reseller->traffic_total_bytes / (1024**3), 2) : 0;
+        $trafficUsedGb = round($reseller->traffic_used_bytes / (1024**3), 2);
+
+        // Determine if this is the first top-up (account is suspended)
+        $isFirstTopup = $reseller->isAnySuspended();
+        
+        // Get minimum amounts based on first-time or subsequent top-up
+        if ($chargeMode === 'wallet') {
+            $minAmount = $isFirstTopup 
+                ? config('billing.reseller.first_topup.wallet_min', 150000)
+                : config('billing.reseller.min_topup.wallet', 50000);
+        } else {
+            $minAmountGb = $isFirstTopup
+                ? config('billing.reseller.first_topup.traffic_min_gb', 250)
+                : config('billing.reseller.min_topup.traffic_gb', 50);
+            $trafficPricePerGb = config('billing.reseller.traffic.price_per_gb', 750);
+        }
 
         $settings = Setting::all()->pluck('value', 'key');
         $availableMethods = PaymentMethodConfig::availableWalletChargeMethods();
@@ -118,16 +143,23 @@ class OrderController extends Controller
         Log::info('wallet_charge_render', [
             'action' => 'wallet_charge_render',
             'user_id' => $user->id,
+            'reseller_id' => $reseller->id,
+            'charge_mode' => $chargeMode,
+            'is_first_topup' => $isFirstTopup,
             'available_methods' => $availableMethods,
             'default_method' => $defaultMethod,
-            'card_to_card_enabled' => $cardToCardEnabled,
-            'starsefar_enabled' => $starsefarEnabled,
-            'tetra98_enabled' => $tetraEnabled,
         ]);
 
         return view('wallet.charge', [
             'walletBalance' => $walletBalance,
-            'isResellerWallet' => $reseller && $reseller->isWalletBased(),
+            'trafficTotalGb' => $trafficTotalGb ?? 0,
+            'trafficUsedGb' => $trafficUsedGb ?? 0,
+            'chargeMode' => $chargeMode,
+            'isFirstTopup' => $isFirstTopup,
+            'minAmount' => $minAmount ?? null,
+            'minAmountGb' => $minAmountGb ?? null,
+            'trafficPricePerGb' => $trafficPricePerGb ?? 750,
+            'isResellerWallet' => $reseller->isWalletBased(),
             'cardDetails' => $cardDetails,
             'starsefarSettings' => $starsefarSettings,
             'cardToCardEnabled' => $cardToCardEnabled,
@@ -148,13 +180,72 @@ class OrderController extends Controller
             ]);
         }
 
-        $request->validate([
-            'amount' => 'required|integer|min:10000',
-            'proof' => 'required|image|mimes:jpeg,png,webp,jpg|max:4096',
-        ]);
-
         $user = Auth::user();
         $reseller = $user->reseller;
+
+        if (!$reseller) {
+            return redirect()->back()->withErrors(['error' => 'حساب شما به درستی پیکربندی نشده است.']);
+        }
+
+        $chargeMode = $reseller->isWalletBased() ? 'wallet' : 'traffic';
+        $isFirstTopup = $reseller->isAnySuspended();
+
+        // Validate based on charge mode
+        if ($chargeMode === 'wallet') {
+            $minAmount = $isFirstTopup
+                ? config('billing.reseller.first_topup.wallet_min', 150000)
+                : config('billing.reseller.min_topup.wallet', 50000);
+
+            $request->validate([
+                'amount' => ['required', 'integer', "min:{$minAmount}"],
+                'proof' => 'required|image|mimes:jpeg,png,webp,jpg|max:4096',
+            ], [
+                'amount.min' => $isFirstTopup
+                    ? "برای فعال‌سازی حساب، حداقل {$minAmount} تومان شارژ کنید."
+                    : "حداقل مبلغ شارژ {$minAmount} تومان است.",
+            ]);
+
+            $amount = $request->amount;
+            $description = $isFirstTopup
+                ? "شارژ اولیه کیف پول ریسلر ({$amount} تومان - در انتظار تایید)"
+                : "شارژ کیف پول ریسلر ({$amount} تومان - در انتظار تایید)";
+            
+            Log::info('topup_initiated_wallet', [
+                'user_id' => $user->id,
+                'reseller_id' => $reseller->id,
+                'amount' => $amount,
+                'is_first_topup' => $isFirstTopup,
+            ]);
+        } else {
+            // Traffic mode
+            $minAmountGb = $isFirstTopup
+                ? config('billing.reseller.first_topup.traffic_min_gb', 250)
+                : config('billing.reseller.min_topup.traffic_gb', 50);
+            $trafficPricePerGb = config('billing.reseller.traffic.price_per_gb', 750);
+
+            $request->validate([
+                'traffic_gb' => ['required', 'numeric', "min:{$minAmountGb}"],
+                'proof' => 'required|image|mimes:jpeg,png,webp,jpg|max:4096',
+            ], [
+                'traffic_gb.min' => $isFirstTopup
+                    ? "برای فعال‌سازی حساب، حداقل {$minAmountGb} گیگابایت ترافیک خریداری کنید."
+                    : "حداقل مقدار خرید {$minAmountGb} گیگابایت است.",
+            ]);
+
+            $trafficGb = $request->traffic_gb;
+            $amount = (int) ($trafficGb * $trafficPricePerGb);
+            $description = $isFirstTopup
+                ? "خرید اولیه ترافیک ({$trafficGb} گیگابایت - در انتظار تایید)"
+                : "خرید ترافیک ({$trafficGb} گیگابایت - در انتظار تایید)";
+
+            Log::info('topup_initiated_traffic', [
+                'user_id' => $user->id,
+                'reseller_id' => $reseller->id,
+                'traffic_gb' => $trafficGb,
+                'amount' => $amount,
+                'is_first_topup' => $isFirstTopup,
+            ]);
+        }
 
         try {
             // Store the proof image
@@ -174,40 +265,49 @@ class OrderController extends Controller
                 );
             }
 
-            // Determine the description based on user type
-            $description = ($reseller && method_exists($reseller, 'isWalletBased') && $reseller->isWalletBased())
-                ? 'شارژ کیف پول ریسلر (در انتظار تایید)'
-                : 'شارژ کیف پول (در انتظار تایید)';
-
             // Create pending transaction immediately for admin approval
+            $transactionMetadata = [
+                'charge_mode' => $chargeMode,
+                'is_first_topup' => $isFirstTopup,
+                'reseller_id' => $reseller->id,
+            ];
+
+            if ($chargeMode === 'traffic') {
+                $transactionMetadata['traffic_gb'] = $request->traffic_gb;
+                $transactionMetadata['price_per_gb'] = $trafficPricePerGb;
+            }
+
             $transaction = Transaction::create([
                 'user_id' => $user->id,
-                'order_id' => null,
-                'amount' => $request->amount,
+                'amount' => $amount,
                 'type' => Transaction::TYPE_DEPOSIT,
                 'status' => Transaction::STATUS_PENDING,
                 'description' => $description,
                 'proof_image_path' => $proofPath,
+                'metadata' => $transactionMetadata,
             ]);
 
             Log::info('Wallet charge transaction created', [
                 'transaction_id' => $transaction->id,
                 'user_id' => $user->id,
-                'amount' => $request->amount,
-                'is_reseller_wallet' => $reseller && method_exists($reseller, 'isWalletBased') && $reseller->isWalletBased(),
+                'reseller_id' => $reseller->id,
+                'charge_mode' => $chargeMode,
+                'amount' => $amount,
+                'is_first_topup' => $isFirstTopup,
                 'proof_path' => $proofPath,
             ]);
 
-            // Determine redirect based on user type
-            $redirectRoute = ($reseller && method_exists($reseller, 'isWalletBased') && $reseller->isWalletBased())
-                ? '/reseller'
-                : route('dashboard');
+            // Determine redirect based on reseller type
+            $redirectRoute = $reseller->isWalletBased() ? '/reseller' : '/reseller';
 
             return redirect($redirectRoute)->with('status', 'درخواست شارژ با موفقیت ارسال شد و منتظر تایید است.');
         } catch (\Exception $e) {
             Log::error('Failed to create wallet charge transaction', [
                 'user_id' => $user->id,
+                'reseller_id' => $reseller->id ?? null,
+                'charge_mode' => $chargeMode ?? null,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return redirect()->back()->withErrors(['error' => 'خطا در ثبت درخواست. لطفاً دوباره تلاش کنید.'])->withInput();
