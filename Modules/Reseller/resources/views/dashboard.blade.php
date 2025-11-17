@@ -211,12 +211,16 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
                         <div class="bg-purple-50 dark:bg-purple-900 p-3 md:p-4 rounded-lg">
                             <div class="text-xs md:text-sm text-gray-600 dark:text-gray-300">تاریخ شروع</div>
-                            <div class="text-base md:text-lg font-bold text-gray-900 dark:text-gray-100">{{ $stats['window_starts_at']->format('Y-m-d') }}</div>
+                            <div class="text-base md:text-lg font-bold text-gray-900 dark:text-gray-100">{{ $reseller->window_start_label }}</div>
                         </div>
                         <div class="bg-yellow-50 dark:bg-yellow-900 p-3 md:p-4 rounded-lg">
                             <div class="text-xs md:text-sm text-gray-600 dark:text-gray-300">تاریخ پایان</div>
-                            <div class="text-base md:text-lg font-bold text-gray-900 dark:text-gray-100">{{ $stats['window_ends_at']->format('Y-m-d') }}</div>
-                            <div class="text-xs md:text-sm text-gray-500 dark:text-gray-400">{{ $stats['days_remaining'] }} روز باقی‌مانده</div>
+                            <div class="text-base md:text-lg font-bold text-gray-900 dark:text-gray-100">{{ $reseller->window_end_label }}</div>
+                            @if (! is_null($stats['days_remaining']))
+                                <div class="text-xs md:text-sm text-gray-500 dark:text-gray-400">{{ $stats['days_remaining'] }} روز باقی‌مانده</div>
+                            @else
+                                <div class="text-xs md:text-sm text-gray-500 dark:text-gray-400">بدون محدودیت زمانی</div>
+                            @endif
                         </div>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
