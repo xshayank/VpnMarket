@@ -64,8 +64,9 @@
 <body class="modern-auth-body">
 
 @php
-    $initialResellerType = old('reseller_type', $defaultResellerType ?? '');
-    $initialPanelId = old('primary_panel_id', $defaultPanelId ?? '');
+    $prefill = $prefill ?? [];
+    $initialResellerType = old('reseller_type') ?? ($prefill['reseller_type'] ?? '');
+    $initialPanelId = old('primary_panel_id') ?? ($prefill['primary_panel_id'] ?? '');
 @endphp
 
 <!-- Floating particles -->
@@ -114,7 +115,7 @@
 
         {{-- Reseller Type Selection --}}
         <div class="input-group">
-            <label class="input-label">نوع حساب ریسلر:</label>
+            <label class="input-label">نوع حساب نماینده:</label>
             <select name="reseller_type" class="input-field" x-model="resellerType" required>
                 <option value="">انتخاب کنید...</option>
                 <option value="wallet">کیف پول (۱۵۰,۰۰۰ تومان حداقل شارژ اول)</option>
@@ -195,9 +196,7 @@ function registrationForm(panels, defaultType, defaultPanelId) {
         panels: panels,
 
         init() {
-            if (this.selectedPanelId) {
-                this.onPanelChange();
-            }
+            this.onPanelChange();
         },
 
         onPanelChange() {

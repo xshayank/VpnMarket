@@ -34,19 +34,30 @@ class RegisteredUserController extends Controller
 
             // Get settings for branding and defaults
             $settings = Setting::getCachedMap();
-            $defaultResellerType = request('reseller_type', $settings->get('homepage.default_reseller_type'));
-            $defaultResellerType = in_array($defaultResellerType, ['wallet', 'traffic'], true) ? $defaultResellerType : null;
 
-            $defaultPanelId = request('primary_panel_id', $settings->get('homepage.default_panel_id'));
-            if ($defaultPanelId && !$panels->pluck('id')->contains((int) $defaultPanelId)) {
-                $defaultPanelId = null;
-            }
+            $requestedType = strtolower((string) request()->query('reseller_type', ''));
+            $settingsDefaultType = $settings->get('homepage.default_reseller_type');
+            $prefillResellerType = in_array($requestedType, ['wallet', 'traffic'], true)
+                ? $requestedType
+                : (in_array($settingsDefaultType, ['wallet', 'traffic'], true) ? $settingsDefaultType : null);
+
+            $requestedPanelId = request()->query('primary_panel_id', request()->query('panel_id'));
+            $settingsPanelId = $settings->get('homepage.default_panel_id');
+            $validPanelIds = $panels->pluck('id');
+
+            $prefillPanelId = $requestedPanelId && $validPanelIds->contains((int) $requestedPanelId)
+                ? (int) $requestedPanelId
+                : ($settingsPanelId && $validPanelIds->contains((int) $settingsPanelId) ? (int) $settingsPanelId : null);
 
             return view('auth.register', [
                 'panels' => $panels,
                 'settings' => $settings,
-                'defaultResellerType' => $defaultResellerType,
-                'defaultPanelId' => $defaultPanelId,
+                'defaultResellerType' => $prefillResellerType,
+                'defaultPanelId' => $prefillPanelId,
+                'prefill' => [
+                    'reseller_type' => $prefillResellerType,
+                    'primary_panel_id' => $prefillPanelId,
+                ],
             ]);
         } catch (\Throwable $e) {
             // Log model autoload or other critical errors
