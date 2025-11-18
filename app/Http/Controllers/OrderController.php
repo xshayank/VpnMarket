@@ -108,7 +108,7 @@ class OrderController extends Controller
             $minAmountGb = $isFirstTopup
                 ? config('billing.min_first_traffic_topup_gb', config('billing.reseller.first_topup.traffic_min_gb', 250))
                 : config('billing.min_traffic_topup_gb', config('billing.reseller.min_topup.traffic_gb', 50));
-            $trafficPricePerGb = config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750));
+            $trafficPricePerGb = $reseller->getTrafficPricePerGb();
         }
 
         $settings = Setting::all()->pluck('value', 'key');
@@ -221,7 +221,7 @@ class OrderController extends Controller
             $minAmountGb = $isFirstTopup
                 ? config('billing.min_first_traffic_topup_gb', config('billing.reseller.first_topup.traffic_min_gb', 250))
                 : config('billing.min_traffic_topup_gb', config('billing.reseller.min_topup.traffic_gb', 50));
-            $trafficPricePerGb = config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750));
+            $trafficPricePerGb = $reseller->getTrafficPricePerGb();
 
             $request->validate([
                 'traffic_gb' => ['required', 'integer', "min:{$minAmountGb}"],

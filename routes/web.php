@@ -9,6 +9,7 @@ use App\Models\Panel;
 use App\Models\Plan;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
 use App\Support\Tetra98Config;
 
 use App\Http\Controllers\WebhookController as NowPaymentsWebhookController;
@@ -22,6 +23,9 @@ use Modules\TelegramBot\Http\Controllers\WebhookController as TelegramWebhookCon
 
 Route::get('/', function () {
     $settings = Setting::getCachedMap();
+    $reseller = Auth::user()?->reseller;
+    $trafficRate = $reseller?->getTrafficPricePerGb()
+        ?? config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750));
 
     $decodeJson = function (string $key) use ($settings) {
         $raw = $settings->get($key);
@@ -41,9 +45,10 @@ Route::get('/', function () {
         'hero_subtitle' => $settings->get('homepage.hero_subtitle', 'OpenVPN و V2Ray با تحویل سریع، پایداری بالا و پشتیبانی اختصاصی برای نماینده‌ها'),
         'hero_media_url' => $settings->get('homepage.hero_media_url'),
         'primary_cta_text' => $settings->get('homepage.primary_cta_text', 'شروع در فالکو پنل'),
-        'secondary_cta_text' => $settings->get('homepage.secondary_cta_text', 'مشاهده پلن‌ها'),
+        'secondary_cta_text' => $settings->get('homepage.secondary_cta_text', 'مشاهده تعرفه‌ها'),
         'show_panels' => $boolSetting('homepage.show_panels', true),
-        'show_plans' => $boolSetting('homepage.show_plans', true),
+        'show_plans' => false,
+        'show_rates' => $boolSetting('homepage.show_rates', true),
         'show_testimonials' => $boolSetting('homepage.show_testimonials', false),
         'show_faq' => $boolSetting('homepage.show_faq', true),
         'trust_badges' => $decodeJson('homepage.trust_badges'),
@@ -82,13 +87,13 @@ Route::get('/', function () {
     }
 
     $panels = Panel::where('is_active', true)->get();
-    $plans = Plan::where('is_active', true)->orderBy('price')->take(6)->get();
 
     return view('landing.index', [
         'settings' => $settings,
         'homepage' => $homepage,
         'panels' => $panels,
-        'plans' => $plans,
+        'trafficRate' => $trafficRate,
+        'reseller' => $reseller,
     ]);
 })->name('home');
 
