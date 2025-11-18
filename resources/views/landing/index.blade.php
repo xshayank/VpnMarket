@@ -83,7 +83,7 @@
     $ctaQuery = ['reseller_type' => $defaultType];
     if ($defaultPanel) { $ctaQuery['primary_panel_id'] = $defaultPanel; }
     $primaryCtaLink = $registerBase . '?' . http_build_query($ctaQuery);
-    $plansAnchor = '#plans';
+    $ratesAnchor = '#rates';
 @endphp
 <div class="container">
     <header class="hero">
@@ -93,7 +93,7 @@
             <p class="subtitle">{{ $homepage['hero_subtitle'] }}</p>
             <div class="cta-row">
                 <a class="btn btn-primary" href="{{ $primaryCtaLink }}">{{ $homepage['primary_cta_text'] }}</a>
-                <a class="btn btn-secondary" href="{{ $plans->isNotEmpty() ? $plansAnchor : $primaryCtaLink }}">{{ $homepage['secondary_cta_text'] }}</a>
+                <a class="btn btn-secondary" href="{{ $homepage['show_rates'] ? $ratesAnchor : $primaryCtaLink }}">{{ $homepage['secondary_cta_text'] }}</a>
             </div>
             <div class="cta-row" style="gap: 8px; margin-top: 18px;">
                 <span class="badge"><span class="inline-icon">✔️</span>راه‌اندازی کمتر از ۵ دقیقه</span>
@@ -172,34 +172,12 @@
         </section>
     @endif
 
-    @if($homepage['show_plans'] && $plans->isNotEmpty())
-    <section class="section" id="plans">
-        <div class="section-header">
-            <h2>پلن‌های پیشنهادی</h2>
-            <p class="lead">پلن‌های فعال برای شروع فروش. پس از ثبت‌نام نیز می‌توانید پلن اختصاصی بخواهید.</p>
-        </div>
-        <div class="grid plans-grid">
-            @foreach($plans as $plan)
-                <div class="card glass">
-                    <div class="panel-tag">{{ $plan->panel?->name ?? 'بدون پنل' }}</div>
-                    <h3 style="margin: 10px 0 4px;">{{ $plan->name }}</h3>
-                    <div class="price">{{ number_format($plan->price) }} {{ $plan->currency ?? 'تومان' }}</div>
-                    <p class="muted">@if($plan->volume_gb) {{ $plan->volume_gb }} گیگابایت • @endif @if($plan->duration_days) {{ $plan->duration_days }} روز @else ترافیک محور @endif</p>
-                    <a class="btn btn-primary" href="{{ $primaryCtaLink }}" aria-label="ثبت‌نام برای {{ $plan->name }}">ثبت نام</a>
-                </div>
-            @endforeach
-        </div>
-    </section>
-    @endif
-
-    @if($homepage['show_plans'] && $plans->isEmpty())
-        <section class="section" id="plans-empty">
-            <div class="glass card" style="text-align: center;">
-                <h2>پلنی برای نمایش نیست</h2>
-                <p class="muted">پلن‌های جدید در حال آماده‌سازی هستند. برای شروع همکاری با ما در ارتباط باشید.</p>
-                <a class="btn btn-secondary" href="https://t.me/xShayank" rel="noopener" target="_blank">تماس با پشتیبانی</a>
-            </div>
-        </section>
+    @if($homepage['show_rates'] ?? true)
+        @include('landing.partials._rates', [
+            'registerBase' => $registerBase,
+            'trafficRate' => $trafficRate ?? config('billing.traffic_rate_per_gb', 750),
+            'reseller' => $reseller ?? null,
+        ])
     @endif
 
     <section class="section">

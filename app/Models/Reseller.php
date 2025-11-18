@@ -196,6 +196,17 @@ class Reseller extends Model
         return $this->wallet_price_per_gb ?? config('billing.wallet.price_per_gb', 780);
     }
 
+    public function getTrafficPricePerGb(): int
+    {
+        $metaRate = is_array($this->meta) ? ($this->meta['traffic_rate_per_gb'] ?? null) : null;
+
+        if ($metaRate !== null) {
+            return (int) $metaRate;
+        }
+
+        return config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750));
+    }
+
     public function isSuspendedWallet(): bool
     {
         return $this->status === 'suspended_wallet';

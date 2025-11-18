@@ -15,8 +15,9 @@ class LandingPageTest extends TestCase
         $response = $this->get('/');
 
         $response->assertStatus(200);
-        $response->assertSee('ریسلر OpenVPN');
-        $response->assertSee('شروع به عنوان ریسلر');
+        $response->assertSee('تعرفه‌ها');
+        $response->assertSee('پرداخت بر اساس ترافیک');
+        $response->assertDontSee('پلن‌های پیشنهادی');
     }
 
     public function test_homepage_shows_waitlist_when_no_data(): void
