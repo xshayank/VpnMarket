@@ -119,7 +119,7 @@
             <select name="reseller_type" class="input-field" x-model="resellerType" required>
                 <option value="">انتخاب کنید...</option>
                 <option value="wallet">کیف پول (۱۵۰,۰۰۰ تومان حداقل شارژ اول)</option>
-                <option value="traffic">ترافیک (۲۵۰ گیگابایت حداقل خرید اول)</option>
+                <option value="traffic">ترافیک (۱۰۰۰ گیگابایت حداقل خرید اول)</option>
             </select>
             <x-input-error :messages="$errors->get('reseller_type')" class="input-error-message" />
         </div>
