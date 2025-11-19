@@ -249,3 +249,69 @@ test('config name is unique across all configs', function () {
     // All names should be unique
     expect(count($names))->toBe(count(array_unique($names)));
 });
+
+test('custom prefix replaces default prefix in generated name', function () {
+    config(['config_names.enabled' => true]);
+    
+    $generator = new ConfigNameGenerator();
+    
+    // Generate config with custom prefix
+    $customPrefix = 'CUSTOM';
+    $nameData = $generator->generate($this->reseller, $this->panel, 'wallet', ['prefix' => $customPrefix]);
+    
+    expect($nameData['name'])->toStartWith($customPrefix . '_')
+        ->and($nameData['name'])->not->toStartWith('FP_')
+        ->and($nameData['version'])->toBe(2);
+    
+    // Verify the full pattern with custom prefix
+    expect($nameData['name'])->toMatch('/^CUSTOM_EY_[a-z0-9]+_W_\d{4}_[a-z0-9]{5}$/');
+});
+
+test('prefix override is reflected in database', function () {
+    config(['config_names.enabled' => true]);
+    
+    $generator = new ConfigNameGenerator();
+    $customPrefix = 'MYPREFIX';
+    $nameData = $generator->generate($this->reseller, $this->panel, 'wallet', ['prefix' => $customPrefix]);
+    
+    $config = ResellerConfig::create([
+        'reseller_id' => $this->reseller->id,
+        'panel_id' => $this->panel->id,
+        'external_username' => $nameData['name'],
+        'name_version' => $nameData['version'],
+        'panel_type' => $this->panel->panel_type,
+        'traffic_limit_bytes' => 10 * 1024 * 1024 * 1024,
+        'expires_at' => now()->addDays(30),
+        'created_by' => $this->user->id,
+        'status' => 'active',
+        'prefix' => $customPrefix,
+    ]);
+    
+    expect($config->external_username)->toStartWith($customPrefix . '_')
+        ->and($config->prefix)->toBe($customPrefix)
+        ->and($config->name_version)->toBe(2);
+});
+
+test('custom name bypasses v2 generator regardless of prefix', function () {
+    config(['config_names.enabled' => true]);
+    
+    $customName = 'MyCompletelyCustomName';
+    
+    // Create config with custom name (simulating controller logic)
+    $config = ResellerConfig::create([
+        'reseller_id' => $this->reseller->id,
+        'panel_id' => $this->panel->id,
+        'external_username' => $customName,
+        'name_version' => null, // Custom names should have null version
+        'panel_type' => $this->panel->panel_type,
+        'traffic_limit_bytes' => 10 * 1024 * 1024 * 1024,
+        'expires_at' => now()->addDays(30),
+        'created_by' => $this->user->id,
+        'status' => 'active',
+        'custom_name' => $customName,
+    ]);
+    
+    expect($config->external_username)->toBe($customName)
+        ->and($config->name_version)->toBeNull()
+        ->and($config->custom_name)->toBe($customName);
+});
