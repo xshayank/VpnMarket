@@ -928,4 +928,49 @@ class ConfigController extends Controller
 
         return back()->with('success', 'Usage reset successfully. Settled '.round($toSettleFinal / (1024 * 1024 * 1024), 2).' GB to your account.');
     }
+
+    /**
+     * Get panel data (nodes/services) for AJAX refresh
+     */
+    public function getPanelData(Request $request, Panel $panel)
+    {
+        $reseller = $request->user()->reseller;
+
+        // Null safety: check if reseller exists
+        if (! $reseller) {
+            return response()->json(['error' => 'Reseller account not found.'], 403);
+        }
+
+        // Verify reseller has access to this panel
+        $hasAccess = $reseller->hasPanelAccess($panel->id)
+            || $reseller->panel_id == $panel->id
+            || $reseller->primary_panel_id == $panel->id;
+
+        if (! $hasAccess) {
+            return response()->json(['error' => 'You do not have access to this panel.'], 403);
+        }
+
+        // Get panel access data from pivot
+        $panelAccess = $reseller->panelAccess($panel->id);
+        $allowedNodeIds = $panelAccess && $panelAccess->allowed_node_ids
+            ? json_decode($panelAccess->allowed_node_ids, true)
+            : null;
+        $allowedServiceIds = $panelAccess && $panelAccess->allowed_service_ids
+            ? json_decode($panelAccess->allowed_service_ids, true)
+            : null;
+
+        // Use PanelDataService to get fresh data (bypass cache if needed)
+        $panelDataService = new PanelDataService;
+        $panelData = $panelDataService->getPanelDataForJs($panel, $allowedNodeIds, $allowedServiceIds);
+
+        Log::info('panel_data_fetch_ajax', [
+            'reseller_id' => $reseller->id,
+            'panel_id' => $panel->id,
+            'panel_type' => $panelData['panel_type'],
+            'nodes_count' => count($panelData['nodes']),
+            'services_count' => count($panelData['services']),
+        ]);
+
+        return response()->json($panelData);
+    }
 }
