@@ -62,64 +62,75 @@ class ReenableResellerConfigsJob implements ShouldQueue
             'suspension_reason' => $this->suspensionReason,
         ]);
 
-        $panel = $this->reseller->primaryPanel ?? $this->reseller->panel;
-        $panelType = $panel ? strtolower(trim($panel->panel_type ?? '')) : null;
+        // Group configs by panel for efficient processing
+        $configsByPanel = $configs->groupBy('panel_id');
 
         $successCount = 0;
         $failCount = 0;
 
-        foreach ($configs as $config) {
-            try {
-                // For Eylandoo panels, attempt remote enable first (remote-first gating)
-                if ($panelType === 'eylandoo' && $panel) {
-                    try {
-                        $provisioner = $this->getEylandooProvisioner($panel);
-                        $remoteEnabled = $provisioner->enableUser($config->panel_user_id ?? $config->username);
+        foreach ($configsByPanel as $panelId => $panelConfigs) {
+            $panel = Panel::find($panelId);
+            
+            if (!$panel) {
+                Log::warning('Panel not found for configs', [
+                    'panel_id' => $panelId,
+                    'config_count' => $panelConfigs->count(),
+                ]);
+                $failCount += $panelConfigs->count();
+                continue;
+            }
 
-                        Log::info('eylandoo_remote_enable_' . ($remoteEnabled ? 'success' : 'failed'), [
+            $panelType = strtolower(trim($panel->panel_type ?? ''));
+
+            Log::info('reenable_panel_batch_start', [
+                'reseller_id' => $this->reseller->id,
+                'panel_id' => $panel->id,
+                'panel_type' => $panelType,
+                'config_count' => $panelConfigs->count(),
+            ]);
+
+            foreach ($panelConfigs as $config) {
+                try {
+                    // For all panels, attempt remote enable first (remote-first gating)
+                    $remoteEnabled = $this->enableConfigOnPanel($config, $panel);
+
+                    if ($remoteEnabled) {
+                        // Update local config status
+                        $config->status = 'active';
+                        
+                        // Clear suspension metadata
+                        $meta = $config->meta ?? [];
+                        unset($meta[$metaKey]);
+                        $config->meta = $meta;
+                        
+                        $config->save();
+
+                        Log::info('config_reenable_success', [
                             'reseller_id' => $this->reseller->id,
                             'config_id' => $config->id,
-                            'panel_user_id' => $config->panel_user_id,
+                            'panel_id' => $panel->id,
+                            'panel_type' => $panelType,
                         ]);
 
-                        if (!$remoteEnabled) {
-                            throw new \Exception('Remote enable failed for Eylandoo config');
-                        }
-                    } catch (\Exception $e) {
-                        Log::error('eylandoo_remote_enable_failed', [
+                        $successCount++;
+                    } else {
+                        Log::warning('config_reenable_remote_failed', [
                             'reseller_id' => $this->reseller->id,
                             'config_id' => $config->id,
-                            'error' => $e->getMessage(),
+                            'panel_id' => $panel->id,
+                            'panel_type' => $panelType,
                         ]);
                         $failCount++;
-                        continue; // Don't update local state if remote enable failed
                     }
+                } catch (\Exception $e) {
+                    Log::error('config_reenable_failed', [
+                        'reseller_id' => $this->reseller->id,
+                        'config_id' => $config->id,
+                        'panel_id' => $panel->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $failCount++;
                 }
-
-                // Update local config status
-                $config->status = 'active';
-                
-                // Clear suspension metadata
-                $meta = $config->meta ?? [];
-                unset($meta[$metaKey]);
-                $config->meta = $meta;
-                
-                $config->save();
-
-                Log::info('config_reenable_success', [
-                    'reseller_id' => $this->reseller->id,
-                    'config_id' => $config->id,
-                    'panel_type' => $panelType,
-                ]);
-
-                $successCount++;
-            } catch (\Exception $e) {
-                Log::error('config_reenable_failed', [
-                    'reseller_id' => $this->reseller->id,
-                    'config_id' => $config->id,
-                    'error' => $e->getMessage(),
-                ]);
-                $failCount++;
             }
         }
 
@@ -129,6 +140,54 @@ class ReenableResellerConfigsJob implements ShouldQueue
             'success' => $successCount,
             'failed' => $failCount,
         ]);
+    }
+
+    /**
+     * Enable a config on its remote panel
+     *
+     * @param ResellerConfig $config
+     * @param Panel $panel
+     * @return bool True if enabled successfully
+     */
+    protected function enableConfigOnPanel(ResellerConfig $config, Panel $panel): bool
+    {
+        $panelType = strtolower(trim($panel->panel_type ?? ''));
+
+        try {
+            switch ($panelType) {
+                case 'eylandoo':
+                    $provisioner = $this->getEylandooProvisioner($panel);
+                    return $provisioner->enableUser($config->panel_user_id ?? $config->external_username);
+
+                case 'marzneshin':
+                    $provisioner = $this->getMarzneshinProvisioner($panel);
+                    return $provisioner->enableUser($config->panel_user_id);
+
+                case 'marzban':
+                    $provisioner = $this->getMarzbanProvisioner($panel);
+                    return $provisioner->enableUser($config->panel_user_id);
+
+                case 'xui':
+                case '3x-ui':
+                    $provisioner = $this->getXUIProvisioner($panel);
+                    return $provisioner->enableUser($config->panel_user_id);
+
+                default:
+                    Log::warning('Unknown panel type for re-enable', [
+                        'panel_type' => $panelType,
+                        'panel_id' => $panel->id,
+                    ]);
+                    return false;
+            }
+        } catch (\Exception $e) {
+            Log::error('Exception enabling config on panel', [
+                'config_id' => $config->id,
+                'panel_id' => $panel->id,
+                'panel_type' => $panelType,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     /**
@@ -142,6 +201,49 @@ class ReenableResellerConfigsJob implements ShouldQueue
             $credentials['url'],
             $credentials['api_token'],
             $credentials['extra']['node_hostname'] ?? ''
+        );
+    }
+
+    /**
+     * Get Marzneshin provisioner instance
+     */
+    protected function getMarzneshinProvisioner($panel)
+    {
+        $credentials = $panel->getCredentials();
+        
+        return new \App\Provisioners\MarzneshinProvisioner(
+            $credentials['url'],
+            $credentials['username'],
+            $credentials['password'],
+            $credentials['extra']['node_hostname'] ?? ''
+        );
+    }
+
+    /**
+     * Get Marzban provisioner instance
+     */
+    protected function getMarzbanProvisioner($panel)
+    {
+        $credentials = $panel->getCredentials();
+        
+        return new \App\Provisioners\MarzbanProvisioner(
+            $credentials['url'],
+            $credentials['username'],
+            $credentials['password']
+        );
+    }
+
+    /**
+     * Get XUI provisioner instance
+     */
+    protected function getXUIProvisioner($panel)
+    {
+        $credentials = $panel->getCredentials();
+        
+        return new \App\Provisioners\XUIProvisioner(
+            $credentials['url'],
+            $credentials['username'],
+            $credentials['password']
         );
     }
 }

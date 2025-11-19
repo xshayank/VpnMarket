@@ -145,6 +145,14 @@ class Reseller extends Model
     }
 
     /**
+     * Per-panel usage snapshots for multi-panel resellers
+     */
+    public function panelUsageSnapshots(): HasMany
+    {
+        return $this->hasMany(ResellerPanelUsageSnapshot::class);
+    }
+
+    /**
      * Many-to-many relationship with panels via pivot table
      */
     public function panels(): BelongsToMany
