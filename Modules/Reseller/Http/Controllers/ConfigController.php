@@ -8,6 +8,7 @@ use App\Models\Panel;
 use App\Models\Plan;
 use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
+use App\Services\ConfigNameGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -309,10 +310,27 @@ class ConfigController extends Controller
                 ]);
             }
 
+            // Generate username using ConfigNameGenerator (V2) or legacy method
+            $username = '';
+            $nameVersion = null;
+
+            if ($customName) {
+                // Custom name overrides everything - use it directly
+                $username = $customName;
+                $nameVersion = null; // Custom names don't have a version
+            } else {
+                // Use ConfigNameGenerator to generate name
+                $generator = new ConfigNameGenerator();
+                $nameData = $generator->generate($reseller, $panel, $reseller->type);
+                $username = $nameData['name'];
+                $nameVersion = $nameData['version'];
+            }
+
             // Create config record first
             $config = ResellerConfig::create([
                 'reseller_id' => $reseller->id,
-                'external_username' => '', // Will be set after provisioning
+                'external_username' => $username,
+                'name_version' => $nameVersion,
                 'comment' => $request->input('comment'),
                 'prefix' => $prefix,
                 'custom_name' => $customName,
@@ -329,9 +347,6 @@ class ConfigController extends Controller
                     'max_clients' => $maxClients, // Store max_clients in meta for traceability
                 ],
             ]);
-
-            $username = $provisioner->generateUsername($reseller, 'config', $config->id, null, $prefix, $customName);
-            $config->update(['external_username' => $username]);
 
             // Provision on panel - use a non-persisted Plan model instance
             $plan = new Plan;

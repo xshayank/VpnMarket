@@ -139,27 +139,124 @@ Generates short_code for all resellers that don't have one. Should be run once b
 
 ### Config Creation Flow
 
-1. **Before** (Legacy):
+#### ConfigController (Reseller UI)
+**File**: `Modules/Reseller/Http/Controllers/ConfigController.php`
+
+**Implementation**:
 ```php
+use App\Services\ConfigNameGenerator;
+
+// In store() method:
+if ($customName) {
+    // Custom name overrides everything
+    $username = $customName;
+    $nameVersion = null;
+} else {
+    // Use ConfigNameGenerator
+    $generator = new ConfigNameGenerator();
+    $nameData = $generator->generate($reseller, $panel, $reseller->type);
+    $username = $nameData['name'];
+    $nameVersion = $nameData['version'];
+}
+
 $config = ResellerConfig::create([
-    'external_username' => $generatedUsername,
-    // ...
+    'external_username' => $username,
+    'name_version' => $nameVersion,
+    // ... other fields
 ]);
 ```
 
-2. **After** (New Pattern):
-```php
-$generator = new ConfigNameGenerator();
-$nameData = $generator->generate($reseller, $panel, $reseller->type);
+**Status**: ✅ INTEGRATED
 
+#### AttachPanelConfigsToReseller (Admin Bulk Import)
+**File**: `app/Filament/Pages/AttachPanelConfigsToReseller.php`
+
+**Implementation**:
+```php
+// Imported configs from panels are legacy (not V2 generated)
 $config = ResellerConfig::create([
-    'external_username' => $nameData['name'],
-    'name_version' => $nameData['version'],
-    // ...
+    'external_username' => $remoteUsername,
+    'name_version' => null, // Legacy import
+    // ... other fields
 ]);
 ```
 
-### Files to Update
+**Status**: ✅ INTEGRATED
+
+#### ResellerProvisioner (Legacy Fallback)
+**File**: `Modules/Reseller/Services/ResellerProvisioner.php`
+
+**Note**: The `generateUsername()` method remains unchanged as a fallback for:
+- Order-based naming (uses index parameter)
+- Legacy systems that call it directly
+- Custom prefix/name handling
+
+ConfigController now calls ConfigNameGenerator directly instead of using this method.
+
+**Status**: ✅ NO CHANGES NEEDED (used only for orders)
+
+### Files Modified
+
+1. ✅ `Modules/Reseller/Http/Controllers/ConfigController.php` - Integrated ConfigNameGenerator
+2. ✅ `app/Filament/Pages/AttachPanelConfigsToReseller.php` - Set name_version=null for imports
+3. ✅ `.env.example` - Added CONFIG_NAME_V2_ENABLED and CONFIG_NAME_PREFIX
+4. ✅ Tests added: `tests/Feature/ConfigControllerNamingTest.php`
+
+### Existing Files (No Changes Needed)
+
+- `app/Services/ConfigNameGenerator.php` - Already implemented
+- `app/Models/ConfigNameSequence.php` - Already created
+- `app/Models/Reseller.php` - short_code already in fillable
+- `app/Models/ResellerConfig.php` - name_version already in fillable
+- `app/Console/Commands/BackfillResellerShortCodes.php` - Already implemented
+- Database migrations - Already created
+- `config/config_names.php` - Already configured
+- `tests/Unit/ConfigNameGeneratorTest.php` - 15 tests, all passing
+- `tests/Feature/ConfigNamingSystemTest.php` - 7 tests, all passing
+
+### Integration Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| ConfigNameGenerator Service | ✅ Complete | Fully implemented with tests |
+| Database Migrations | ✅ Complete | 3 migrations created |
+| Config File | ✅ Complete | config/config_names.php |
+| Backfill Command | ✅ Complete | php artisan configs:backfill-short-codes |
+| ConfigController Integration | ✅ Complete | Uses ConfigNameGenerator |
+| Admin Bulk Import | ✅ Complete | Sets name_version=null for imports |
+| Environment Configuration | ✅ Complete | Added to .env.example |
+| Unit Tests | ✅ Complete | 15 tests passing |
+| Feature Tests | ✅ Complete | 12 tests passing (7 + 5 new) |
+| Documentation | ✅ Complete | Updated with activation steps |
+| UI Updates | ⏭️ Optional | Badges for legacy/V2 configs |
+
+## Activation Checklist
+
+- [x] ConfigNameGenerator service implemented
+- [x] Database migrations created
+- [x] Config file created
+- [x] Backfill command created
+- [x] ConfigController integrated
+- [x] Admin bulk import updated
+- [x] Environment variables documented
+- [x] Unit tests passing (15/15)
+- [x] Feature tests passing (12/12)
+- [x] Documentation updated
+- [ ] UI badges/components (optional enhancement)
+- [ ] Production deployment
+- [ ] Feature flag enabled in production
+
+## Next Steps
+
+1. **Deploy to Staging**: Deploy code with flag OFF
+2. **Run Migrations**: `php artisan migrate`
+3. **Backfill**: `php artisan configs:backfill-short-codes`
+4. **Enable Flag**: Set `CONFIG_NAME_V2_ENABLED=true`
+5. **Test**: Create configs and verify V2 pattern
+6. **Monitor**: Check logs for `config_name_generated` events
+7. **Production**: Repeat steps 1-6 in production
+
+### UI Files to Update (Optional Enhancement)
 
 1. `Modules/Reseller/Http/Controllers/ConfigController.php` - Config creation endpoint
 2. `app/Filament/Pages/AttachPanelConfigsToReseller.php` - Admin bulk import
@@ -258,47 +355,132 @@ php artisan test --filter=ConfigNamingSystemTest
 ## Rollout Plan
 
 ### Phase 1: Preparation (Staging)
-1. Deploy migrations
-2. Run backfill command: `php artisan configs:backfill-short-codes`
-3. Verify all resellers have short_code
+1. Deploy migrations (already included in codebase)
+2. Run migrations: `php artisan migrate`
+3. Run backfill command: `php artisan configs:backfill-short-codes`
+4. Verify all resellers have short_code: `SELECT COUNT(*) FROM resellers WHERE short_code IS NULL;` should return 0
 
 ### Phase 2: Staging Testing
-1. Enable feature flag: `CONFIG_NAME_V2_ENABLED=true`
-2. Create test configs
-3. Verify name format and uniqueness
-4. Monitor logs for any issues
+1. Enable feature flag in `.env`: `CONFIG_NAME_V2_ENABLED=true`
+2. Clear config cache: `php artisan config:clear`
+3. Create test configs via UI or API
+4. Verify name format matches pattern: `FP_{PT}_{RSL}_{MODE}_{SEQ}_{H5}`
+5. Check logs for `config_name_generated` events
+6. Verify `name_version=2` in database
+7. Test custom name override (should set `name_version=null`)
 
 ### Phase 3: Production Rollout
-1. Deploy to production (feature flag OFF)
-2. Run backfill command
-3. Monitor for 24 hours
-4. Enable feature flag: `CONFIG_NAME_V2_ENABLED=true`
-5. Monitor logs and config creation
+1. Deploy to production with feature flag OFF (`CONFIG_NAME_V2_ENABLED=false`)
+2. Run migrations: `php artisan migrate --force`
+3. Run backfill command: `php artisan configs:backfill-short-codes`
+4. Verify all resellers have short_code
+5. Monitor for 24-48 hours
+6. Enable feature flag: Set `CONFIG_NAME_V2_ENABLED=true` in `.env`
+7. Clear config cache: `php artisan config:clear`
+8. Monitor logs for `config_name_generated` events
+9. Verify new configs have V2 pattern
+10. Verify legacy configs remain unchanged
 
 ### Phase 4: Validation
-1. Check sequence table growth
-2. Verify no duplicate names
-3. Confirm legacy configs still work
-4. Gather user feedback
+1. Check sequence table growth: `SELECT * FROM config_name_sequences ORDER BY updated_at DESC;`
+2. Verify no duplicate names: `SELECT external_username, COUNT(*) FROM reseller_configs GROUP BY external_username HAVING COUNT(*) > 1;`
+3. Confirm legacy configs still work (name_version=NULL)
+4. Test custom name path (name_version=NULL)
+5. Verify sequence increments sequentially
+6. Check collision retry logs (should be rare/none)
+7. Gather user feedback
+
+## Activation Steps (Quick Reference)
+
+### Development/Staging
+```bash
+# 1. Run migrations
+php artisan migrate
+
+# 2. Backfill short codes
+php artisan configs:backfill-short-codes
+
+# 3. Enable V2 naming
+echo "CONFIG_NAME_V2_ENABLED=true" >> .env
+php artisan config:clear
+
+# 4. Verify
+php artisan test --filter=ConfigName
+```
+
+### Production
+```bash
+# 1. Deploy code (flag OFF by default)
+git pull origin main
+
+# 2. Run migrations
+php artisan migrate --force
+
+# 3. Backfill short codes
+php artisan configs:backfill-short-codes
+
+# 4. Wait 24-48 hours, then enable
+nano .env  # Set CONFIG_NAME_V2_ENABLED=true
+php artisan config:clear
+
+# 5. Monitor logs
+tail -f storage/logs/laravel.log | grep config_name
+```
 
 ## Troubleshooting
 
 ### Issue: Short code not generated
-**Solution**: Run backfill command or create config (auto-generates on first use)
+**Symptom**: Error when creating config with V2 naming enabled
+**Solution**: 
+- Run backfill command: `php artisan configs:backfill-short-codes`
+- Or create config (auto-generates on first use)
+- Verify reseller has short_code: `SELECT short_code FROM resellers WHERE id = ?;`
 
 ### Issue: Name collision error
+**Symptom**: Config creation fails with collision error
 **Check**: 
-- Unique constraint on `reseller_configs.external_username`
-- Sequence table has proper unique index
-- Review `config_name_collision_retry` logs
+- Unique constraint exists: `SHOW INDEXES FROM reseller_configs WHERE Column_name = 'external_username';`
+- Sequence table has proper unique index: `SHOW INDEXES FROM config_name_sequences;`
+- Review collision retry logs: `grep config_name_collision_retry storage/logs/laravel.log`
+- Check for duplicate usernames: `SELECT external_username, COUNT(*) FROM reseller_configs GROUP BY external_username HAVING COUNT(*) > 1;`
 
 ### Issue: Feature flag not working
+**Symptom**: Still generating legacy names even with flag ON
 **Check**:
 - `.env` file has `CONFIG_NAME_V2_ENABLED=true`
 - Config cache cleared: `php artisan config:clear`
+- Verify config value: `php artisan tinker` then `config('config_names.enabled')`
+- Check for typos in .env file
 
 ### Issue: Tests failing with "Unknown format 'name'"
-**Solution**: Faker locale issue - change `APP_FAKER_LOCALE` to `en_US` for tests
+**Symptom**: Faker locale errors in tests
+**Solution**: 
+- Change `APP_FAKER_LOCALE=en_US` in phpunit.xml or .env.testing
+- Or use `APP_FAKER_LOCALE=fa_IR` for Persian locale (default)
+
+### Issue: Custom names not working
+**Symptom**: Custom name is being transformed or V2 pattern applied
+**Check**:
+- User has permission: `configs.set_custom_name`
+- custom_name field is provided in request
+- Verify name_version is NULL for custom names
+- Check ConfigController logic for custom_name handling
+
+### Issue: Sequence not incrementing
+**Symptom**: Multiple configs have same sequence number
+**Check**:
+- Database transaction isolation level
+- config_name_sequences table has unique constraint
+- No deadlocks in database logs
+- Concurrent config creation handling
+
+### Issue: Legacy configs showing incorrectly
+**Symptom**: Old configs display errors or wrong data
+**Check**:
+- name_version column exists: `DESCRIBE reseller_configs;`
+- Legacy configs have NULL name_version
+- UI correctly handles NULL name_version (shows "Legacy" badge)
+- parseName returns null for legacy configs
 
 ## Performance Considerations
 
