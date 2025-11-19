@@ -37,11 +37,26 @@ class MultiPanelUsageAggregator
         // Get all panels assigned to this reseller
         $panels = $reseller->panels;
 
-        // Fallback to primary panel if no panels assigned (backward compatibility)
-        if ($panels->isEmpty() && $reseller->primary_panel_id) {
-            $primaryPanel = Panel::find($reseller->primary_panel_id);
-            if ($primaryPanel) {
-                $panels = collect([$primaryPanel]);
+        // Fallback: if no panels assigned via relationship, collect from configs and primary panel
+        if ($panels->isEmpty()) {
+            $panelIds = [];
+            
+            // Add primary panel if set
+            if ($reseller->primary_panel_id) {
+                $panelIds[] = $reseller->primary_panel_id;
+            }
+            
+            // Add unique panel IDs from configs
+            $configPanelIds = ResellerConfig::where('reseller_id', $reseller->id)
+                ->whereNotNull('panel_id')
+                ->pluck('panel_id')
+                ->unique()
+                ->toArray();
+            
+            $panelIds = array_unique(array_merge($panelIds, $configPanelIds));
+            
+            if (!empty($panelIds)) {
+                $panels = Panel::whereIn('id', $panelIds)->get();
             }
         }
 
