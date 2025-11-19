@@ -42,6 +42,10 @@ Route::prefix('reseller')
         Route::post('/configs/{config}/disable', [ConfigController::class, 'disable'])->name('configs.disable');
         Route::post('/configs/{config}/enable', [ConfigController::class, 'enable'])->name('configs.enable');
         Route::delete('/configs/{config}', [ConfigController::class, 'destroy'])->name('configs.destroy');
+        
+        // Panel data fetch for AJAX refresh
+        Route::get('/panels/{panel}/data', [ConfigController::class, 'getPanelData'])
+            ->name('panels.data');
 
         // Manual sync
         Route::post('/sync', [SyncController::class, 'sync'])->name('sync');

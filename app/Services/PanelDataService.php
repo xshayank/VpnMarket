@@ -41,10 +41,7 @@ class PanelDataService
     }
 
     /**
-     * Get services for a Marzneshin panel
-     *
-     * Note: Current implementation doesn't have remote service fetching,
-     * so we return empty array. This is a placeholder for future implementation.
+     * Get services for a Marzneshin panel with caching
      *
      * @return array Array of services with id and name
      */
@@ -54,9 +51,23 @@ class PanelDataService
             return [];
         }
 
-        // TODO: Implement remote service fetching when available
-        // For now, services are configured at reseller level via allowed_service_ids
-        return [];
+        try {
+            // Use the panel's own cached method
+            $services = $panel->getCachedMarzneshinServices() ?? [];
+
+            if (! is_array($services)) {
+                $services = [];
+            }
+
+            return $services;
+        } catch (\Exception $e) {
+            Log::warning('PanelDataService: Failed to fetch services', [
+                'panel_id' => $panel->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
     }
 
     /**
@@ -151,6 +162,8 @@ class PanelDataService
     {
         $panels = $reseller->panels()->where('is_active', true)->get();
         $panelsData = [];
+        $panelsWithoutNodes = 0;
+        $panelsWithoutServices = 0;
 
         foreach ($panels as $panel) {
             // Get panel access data from pivot
@@ -162,8 +175,25 @@ class PanelDataService
                 ? json_decode($panelAccess->allowed_service_ids, true)
                 : null;
 
-            $panelsData[] = $this->getPanelDataForJs($panel, $allowedNodeIds, $allowedServiceIds);
+            $panelData = $this->getPanelDataForJs($panel, $allowedNodeIds, $allowedServiceIds);
+            $panelsData[] = $panelData;
+
+            // Track empty lists for logging
+            if ($panelData['panel_type'] === 'eylandoo' && empty($panelData['nodes'])) {
+                $panelsWithoutNodes++;
+            }
+            if ($panelData['panel_type'] === 'marzneshin' && empty($panelData['services'])) {
+                $panelsWithoutServices++;
+            }
         }
+
+        // Structured logging for panel data built
+        Log::info('panel_data_built', [
+            'reseller_id' => $reseller->id,
+            'panel_count' => count($panelsData),
+            'panels_without_nodes' => $panelsWithoutNodes,
+            'panels_without_services' => $panelsWithoutServices,
+        ]);
 
         return $panelsData;
     }

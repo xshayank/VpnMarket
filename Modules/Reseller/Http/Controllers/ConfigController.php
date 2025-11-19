@@ -67,7 +67,32 @@ class ConfigController extends Controller
         // Get panels the reseller has access to via the pivot table
         $panels = $reseller->panels()->where('is_active', true)->get();
 
-        // If no panels available, show error
+        // If no panels available, try to auto-attach primary panel
+        if ($panels->isEmpty() && $reseller->primary_panel_id) {
+            $primaryPanel = Panel::where('id', $reseller->primary_panel_id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($primaryPanel) {
+                // Auto-attach primary panel to reseller with empty allowed lists
+                $reseller->panels()->attach($primaryPanel->id, [
+                    'allowed_node_ids' => null,
+                    'allowed_service_ids' => null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                Log::info('Auto-attached primary panel to reseller', [
+                    'reseller_id' => $reseller->id,
+                    'panel_id' => $primaryPanel->id,
+                ]);
+
+                // Reload panels after attachment
+                $panels = $reseller->panels()->where('is_active', true)->get();
+            }
+        }
+
+        // If still no panels available, show error
         if ($panels->isEmpty()) {
             return redirect()->route('reseller.dashboard')
                 ->with('error', 'No panels assigned to your account. Please contact support.');
@@ -79,6 +104,20 @@ class ConfigController extends Controller
 
         // Determine prefill panel ID from old input or query param
         $prefillPanelId = old('panel_id') ?? $request->query('panel_id') ?? null;
+
+        // Log panel data fetch for debugging
+        if ($prefillPanelId) {
+            $selectedPanel = collect($panelsForJs)->firstWhere('id', (int) $prefillPanelId);
+            if ($selectedPanel) {
+                Log::info('config_create_panel_prefilled', [
+                    'reseller_id' => $reseller->id,
+                    'panel_id' => $prefillPanelId,
+                    'panel_type' => $selectedPanel['panel_type'],
+                    'nodes_count' => count($selectedPanel['nodes'] ?? []),
+                    'services_count' => count($selectedPanel['services'] ?? []),
+                ]);
+            }
+        }
 
         // Legacy: Keep marzneshin_services for backward compatibility (if needed)
         // This can be removed if no other parts of the view depend on it
@@ -150,6 +189,15 @@ class ConfigController extends Controller
 
         // Panel-specific validation
         $panelType = strtolower(trim($panel->panel_type ?? ''));
+
+        // Log config creation with panel selection
+        Log::info('config_create_panel_selected', [
+            'reseller_id' => $reseller->id,
+            'panel_id' => $panel->id,
+            'panel_type' => $panelType,
+            'node_ids_count' => count($request->node_ids ?? []),
+            'service_ids_count' => count($request->service_ids ?? []),
+        ]);
 
         // Validate that Eylandoo-specific fields are only sent for Eylandoo panels
         if ($panelType !== 'eylandoo' && $request->filled('node_ids')) {
@@ -879,5 +927,50 @@ class ConfigController extends Controller
         }
 
         return back()->with('success', 'Usage reset successfully. Settled '.round($toSettleFinal / (1024 * 1024 * 1024), 2).' GB to your account.');
+    }
+
+    /**
+     * Get panel data (nodes/services) for AJAX refresh
+     */
+    public function getPanelData(Request $request, Panel $panel)
+    {
+        $reseller = $request->user()->reseller;
+
+        // Null safety: check if reseller exists
+        if (! $reseller) {
+            return response()->json(['error' => 'Reseller account not found.'], 403);
+        }
+
+        // Verify reseller has access to this panel
+        $hasAccess = $reseller->hasPanelAccess($panel->id)
+            || $reseller->panel_id == $panel->id
+            || $reseller->primary_panel_id == $panel->id;
+
+        if (! $hasAccess) {
+            return response()->json(['error' => 'You do not have access to this panel.'], 403);
+        }
+
+        // Get panel access data from pivot
+        $panelAccess = $reseller->panelAccess($panel->id);
+        $allowedNodeIds = $panelAccess && $panelAccess->allowed_node_ids
+            ? json_decode($panelAccess->allowed_node_ids, true)
+            : null;
+        $allowedServiceIds = $panelAccess && $panelAccess->allowed_service_ids
+            ? json_decode($panelAccess->allowed_service_ids, true)
+            : null;
+
+        // Use PanelDataService to get fresh data (bypass cache if needed)
+        $panelDataService = new PanelDataService;
+        $panelData = $panelDataService->getPanelDataForJs($panel, $allowedNodeIds, $allowedServiceIds);
+
+        Log::info('panel_data_fetch_ajax', [
+            'reseller_id' => $reseller->id,
+            'panel_id' => $panel->id,
+            'panel_type' => $panelData['panel_type'],
+            'nodes_count' => count($panelData['nodes']),
+            'services_count' => count($panelData['services']),
+        ]);
+
+        return response()->json($panelData);
     }
 }

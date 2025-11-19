@@ -120,9 +120,15 @@
                                 </div>
                             </template>
                             <template x-if="!selectedPanel.services || selectedPanel.services.length === 0">
-                                <p class="text-sm text-gray-600 dark:text-gray-400 p-3 bg-gray-100 dark:bg-gray-700 rounded">
-                                    هیچ سرویسی برای این پنل تعریف نشده است.
-                                </p>
+                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded">
+                                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                        هیچ سرویسی برای این پنل تعریف نشده است.
+                                    </p>
+                                    <button type="button" @click="refreshPanelData(selectedPanel.id)" 
+                                        class="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                        🔄 دریافت دوباره
+                                    </button>
+                                </div>
                             </template>
                         </div>
                     </template>
@@ -146,9 +152,15 @@
                                 </div>
                             </template>
                             <template x-if="!selectedPanel.nodes || selectedPanel.nodes.length === 0">
-                                <p class="text-sm text-gray-600 dark:text-gray-400 p-3 bg-gray-100 dark:bg-gray-700 rounded">
-                                    هیچ نودی برای این پنل یافت نشد. کانفیگ بدون محدودیت نود ایجاد خواهد شد.
-                                </p>
+                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded">
+                                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                        هیچ نودی برای این پنل یافت نشد. کانفیگ بدون محدودیت نود ایجاد خواهد شد.
+                                    </p>
+                                    <button type="button" @click="refreshPanelData(selectedPanel.id)" 
+                                        class="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                        🔄 دریافت دوباره
+                                    </button>
+                                </div>
                             </template>
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                 <span x-show="selectedPanel.nodes && selectedPanel.nodes.some(n => n.is_default)">
@@ -203,6 +215,38 @@
                             }
                         }
                     });
+                },
+                
+                async refreshPanelData(panelId) {
+                    if (!panelId) return;
+                    
+                    try {
+                        const response = await fetch(`/reseller/panels/${panelId}/data`, {
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch panel data');
+                        }
+                        
+                        const data = await response.json();
+                        
+                        // Update the panel data in the panels array
+                        const panelIndex = this.panels.findIndex(p => p.id === panelId);
+                        if (panelIndex !== -1) {
+                            this.panels[panelIndex] = data;
+                            
+                            // Clear selections since data has changed
+                            this.nodeSelections = [];
+                            this.serviceSelections = [];
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing panel data:', error);
+                        alert('خطا در دریافت اطلاعات پنل. لطفا دوباره تلاش کنید.');
+                    }
                 }
             };
         }
