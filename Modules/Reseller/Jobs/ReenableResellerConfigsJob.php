@@ -39,6 +39,20 @@ class ReenableResellerConfigsJob implements ShouldQueue
     {
         Log::info('Starting reseller config re-enable job', ['reseller_id' => $this->resellerId]);
 
+        // Process both traffic-based and wallet-based resellers
+        $this->processTrafficResellers($provisioner);
+        $this->processWalletResellers();
+
+        Log::info('Reseller config re-enable job completed');
+    }
+
+    /**
+     * Process traffic-based resellers for re-enabling
+     */
+    protected function processTrafficResellers(ResellerProvisioner $provisioner): void
+    {
+        Log::info('Processing traffic-based resellers for re-enable');
+
         // If specific reseller ID provided, load that reseller directly
         // When called with a specific ID, we trust the caller's intent (e.g., admin activation)
         // and skip defensive checks - just verify reseller exists and is traffic-based
@@ -133,8 +147,76 @@ class ReenableResellerConfigsJob implements ShouldQueue
 
             $this->reenableResellerConfigs($reseller, $provisioner);
         }
+    }
 
-        Log::info('Reseller config re-enable job completed');
+    /**
+     * Process wallet-based resellers for re-enabling
+     */
+    protected function processWalletResellers(): void
+    {
+        Log::info('Processing wallet-based resellers for re-enable');
+
+        // Find suspended_wallet resellers with positive balance above suspension threshold
+        $suspensionThreshold = config('billing.wallet.suspension_threshold', -1000);
+        
+        $walletResellers = Reseller::where('status', 'suspended_wallet')
+            ->where('type', 'wallet')
+            ->where('wallet_balance', '>', $suspensionThreshold)
+            ->get();
+
+        if ($walletResellers->isEmpty()) {
+            Log::info('No eligible wallet resellers for re-enable');
+            return;
+        }
+
+        Log::info("Found {$walletResellers->count()} eligible wallet resellers for re-enable");
+
+        $walletReenableService = new \App\Services\WalletResellerReenableService();
+
+        foreach ($walletResellers as $reseller) {
+            try {
+                Log::info("wallet_reseller_reenable_start", [
+                    'reseller_id' => $reseller->id,
+                    'wallet_balance' => $reseller->wallet_balance,
+                    'suspension_threshold' => $suspensionThreshold,
+                ]);
+
+                // Reactivate the reseller if still suspended_wallet
+                if ($reseller->status === 'suspended_wallet') {
+                    $reseller->update(['status' => 'active']);
+                    Log::info("Wallet reseller {$reseller->id} reactivated after wallet recharge");
+
+                    // Create audit log for reseller activation
+                    AuditLog::log(
+                        action: 'reseller_activated',
+                        targetType: 'reseller',
+                        targetId: $reseller->id,
+                        reason: 'wallet_balance_recovered',
+                        meta: [
+                            'wallet_balance' => $reseller->wallet_balance,
+                            'suspension_threshold' => $suspensionThreshold,
+                        ],
+                        actorType: null,
+                        actorId: null  // System action
+                    );
+                }
+
+                // Re-enable configs that were disabled by wallet suspension
+                $result = $walletReenableService->reenableWalletSuspendedConfigs($reseller);
+
+                Log::info("wallet_reseller_reenable_complete", [
+                    'reseller_id' => $reseller->id,
+                    'configs_enabled' => $result['enabled'],
+                    'configs_failed' => $result['failed'],
+                ]);
+            } catch (\Exception $e) {
+                Log::error("wallet_reseller_reenable_error", [
+                    'reseller_id' => $reseller->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
+        }
     }
 
     protected function reenableResellerConfigs(Reseller $reseller, ResellerProvisioner $provisioner): void
