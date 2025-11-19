@@ -107,7 +107,7 @@ class ConfigNameGenerator
     }
 
     /**
-     * Build the config name using the pattern: FP-{PT}-{RSL}-{MODE}-{SEQ}-{H5}
+     * Build the config name using the pattern: FP_{PT}_{RSL}_{MODE}_{SEQ}_{H5}
      *
      * @param Reseller $reseller
      * @param Panel $panel
@@ -135,11 +135,11 @@ class ConfigNameGenerator
 
         // Generate hash suffix (5 chars)
         // Use a combination of reseller_id, panel_id, and seq for uniqueness
-        $hashInput = "{$reseller->id}-{$panel->id}-{$seq}-" . microtime(true);
+        $hashInput = "{$reseller->id}_{$panel->id}_{$seq}_" . microtime(true);
         $hash = substr(hash('sha256', $hashInput), 0, 5);
 
-        // Build final name
-        return "{$prefix}-{$panelCode}-{$resellerCode}-{$modeCode}-{$seqPadded}-{$hash}";
+        // Build final name with underscores
+        return "{$prefix}_{$panelCode}_{$resellerCode}_{$modeCode}_{$seqPadded}_{$hash}";
     }
 
     /**
@@ -227,8 +227,8 @@ class ConfigNameGenerator
             return null; // Legacy name, not parseable
         }
 
-        // Pattern: FP-{PT}-{RSL}-{MODE}-{SEQ}-{H5}
-        $pattern = '/^([A-Z]{2,})-([A-Z]{2})-([a-z0-9]+)-([A-Z])-(\d+)-([a-z0-9]{5})$/';
+        // Pattern: FP_{PT}_{RSL}_{MODE}_{SEQ}_{H5}
+        $pattern = '/^([A-Z]{2,})_([A-Z]{2})_([a-z0-9]+)_([A-Z])_(\d+)_([a-z0-9]{5})$/';
         
         if (preg_match($pattern, $name, $matches)) {
             return [

@@ -57,7 +57,7 @@ test('generates new pattern name when feature is enabled', function () {
     expect($result)->toHaveKey('name')
         ->and($result)->toHaveKey('version')
         ->and($result['version'])->toBe(2)
-        ->and($result['name'])->toMatch('/^FP-EY-[a-z0-9]+-W-\d{4}-[a-z0-9]{5}$/');
+        ->and($result['name'])->toMatch('/^FP_EY_[a-z0-9]+_W_\d{4}_[a-z0-9]{5}$/');
 });
 
 test('generates correct panel type codes', function () {
@@ -82,7 +82,7 @@ test('generates correct panel type codes', function () {
         
         $result = $this->generator->generate($this->reseller, $panel, 'wallet');
         
-        expect($result['name'])->toContain("-{$expectedCode}-");
+        expect($result['name'])->toContain("_{$expectedCode}_");
     }
 });
 
@@ -106,7 +106,7 @@ test('generates correct mode codes', function () {
         
         $result = $this->generator->generate($reseller, $this->panel, $mode);
         
-        expect($result['name'])->toContain("-{$expectedCode}-");
+        expect($result['name'])->toContain("_{$expectedCode}_");
     }
 });
 
@@ -115,15 +115,15 @@ test('sequence increments correctly', function () {
     
     // Generate first config name
     $result1 = $this->generator->generate($this->reseller, $this->panel, 'wallet');
-    expect($result1['name'])->toContain('-0001-');
+    expect($result1['name'])->toContain('_0001_');
     
     // Generate second config name
     $result2 = $this->generator->generate($this->reseller, $this->panel, 'wallet');
-    expect($result2['name'])->toContain('-0002-');
+    expect($result2['name'])->toContain('_0002_');
     
     // Generate third config name
     $result3 = $this->generator->generate($this->reseller, $this->panel, 'wallet');
-    expect($result3['name'])->toContain('-0003-');
+    expect($result3['name'])->toContain('_0003_');
     
     // Verify sequence record exists
     $sequence = ConfigNameSequence::where('reseller_id', $this->reseller->id)
@@ -169,8 +169,8 @@ test('generates unique names for different panels', function () {
     $result2 = $this->generator->generate($this->reseller, $panel2, 'wallet');
     
     expect($result1['name'])->not->toBe($result2['name'])
-        ->and($result1['name'])->toContain('-EY-')
-        ->and($result2['name'])->toContain('-MB-');
+        ->and($result1['name'])->toContain('_EY_')
+        ->and($result2['name'])->toContain('_MB_');
 });
 
 test('auto-generates short_code for reseller if missing', function () {
@@ -223,7 +223,7 @@ test('short_code generation uses base36 encoding', function () {
 });
 
 test('parseName returns correct components for v2 name', function () {
-    $name = 'FP-EY-00f-W-0042-abc12';
+    $name = 'FP_EY_00f_W_0042_abc12';
     $parsed = ConfigNameGenerator::parseName($name, 2);
     
     expect($parsed)->not->toBeNull()
@@ -298,5 +298,5 @@ test('uses custom prefix from config', function () {
     
     $result = $this->generator->generate($this->reseller, $this->panel, 'wallet');
     
-    expect($result['name'])->toStartWith('CUSTOM-');
+    expect($result['name'])->toStartWith('CUSTOM_');
 });

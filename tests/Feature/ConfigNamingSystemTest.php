@@ -55,7 +55,7 @@ test('config created with new naming system when flag enabled', function () {
     ]);
     
     expect($config)->not->toBeNull()
-        ->and($config->external_username)->toMatch('/^FP-EY-[a-z0-9]+-W-\d{4}-[a-z0-9]{5}$/')
+        ->and($config->external_username)->toMatch('/^FP_EY_[a-z0-9]+_W_\d{4}_[a-z0-9]{5}$/')
         ->and($config->name_version)->toBe(2);
 });
 
@@ -105,9 +105,9 @@ test('multiple configs created sequentially have incremental sequences', functio
         $configs[] = $config;
     }
     
-    expect($configs[0]->external_username)->toContain('-0001-')
-        ->and($configs[1]->external_username)->toContain('-0002-')
-        ->and($configs[2]->external_username)->toContain('-0003-');
+    expect($configs[0]->external_username)->toContain('_0001_')
+        ->and($configs[1]->external_username)->toContain('_0002_')
+        ->and($configs[2]->external_username)->toContain('_0003_');
 });
 
 test('configs for different resellers have different reseller codes', function () {
@@ -163,8 +163,8 @@ test('configs for different modes have different mode codes', function () {
     $walletNameData = $generator->generate($walletReseller, $this->panel, 'wallet');
     $trafficNameData = $generator->generate($trafficReseller, $this->panel, 'traffic');
     
-    expect($walletNameData['name'])->toContain('-W-')
-        ->and($trafficNameData['name'])->toContain('-T-');
+    expect($walletNameData['name'])->toContain('_W_')
+        ->and($trafficNameData['name'])->toContain('_T_');
 });
 
 test('backfill command generates short codes for all resellers', function () {

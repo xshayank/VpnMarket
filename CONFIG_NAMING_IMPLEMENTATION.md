@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation adds a new human-readable naming pattern for reseller configs: `FP-{PT}-{RSL}-{MODE}-{SEQ}-{H5}`
+This implementation adds a new human-readable naming pattern for reseller configs: `FP_{PT}_{RSL}_{MODE}_{SEQ}_{H5}`
 
 ## Pattern Breakdown
 
@@ -14,8 +14,10 @@ This implementation adds a new human-readable naming pattern for reseller config
 - `{H5}` - 5-character hash for uniqueness
 
 ### Example Names
-- `FP-EY-001-W-0042-abc12` - Eylandoo wallet reseller, 42nd config
-- `FP-MN-00f-T-0123-xyz89` - Marzneshin traffic reseller, 123rd config
+- `FP_EY_001_W_0042_abc12` - Eylandoo wallet reseller, 42nd config
+- `FP_MN_00f_T_0123_xyz89` - Marzneshin traffic reseller, 123rd config
+
+**Note:** Underscores are used instead of hyphens for compatibility with Marzneshin and other panel types.
 
 ## Features
 
@@ -110,7 +112,7 @@ use App\Services\ConfigNameGenerator;
 $generator = new ConfigNameGenerator();
 $result = $generator->generate($reseller, $panel, $mode);
 
-// Returns: ['name' => 'FP-EY-001-W-0042-abc12', 'version' => 2]
+// Returns: ['name' => 'FP_EY_001_W_0042_abc12', 'version' => 2]
 ```
 
 #### Key Methods
@@ -215,7 +217,7 @@ Example:
     "context": {
         "reseller_id": 42,
         "panel_id": 3,
-        "name": "FP-EY-00f-W-0123-abc45",
+        "name": "FP_EY_00f_W_0123_abc45",
         "mode": "wallet",
         "seq": 123
     }
