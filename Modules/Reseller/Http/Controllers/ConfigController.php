@@ -137,7 +137,12 @@ class ConfigController extends Controller
         }
 
         // Validate reseller has access to the selected panel
-        if (!$reseller->hasPanelAccess($request->panel_id)) {
+        // Support both new pivot table approach and legacy panel_id field
+        $hasAccess = $reseller->hasPanelAccess($request->panel_id) 
+            || $reseller->panel_id == $request->panel_id 
+            || $reseller->primary_panel_id == $request->panel_id;
+            
+        if (!$hasAccess) {
             return back()->with('error', 'You do not have access to the selected panel.');
         }
 
@@ -176,28 +181,42 @@ class ConfigController extends Controller
             }
         }
 
-        // Validate Eylandoo node whitelist from pivot
+        // Validate Eylandoo node whitelist from pivot or legacy field
         $nodeIds = array_map('intval', (array) ($request->node_ids ?? []));
         $filteredOutCount = 0;
 
-        if ($this->isEylandooPanel($panel->panel_type) && $panelAccess && $panelAccess->allowed_node_ids) {
-            $allowedNodeIds = json_decode($panelAccess->allowed_node_ids, true) ?: [];
-            $allowedNodeIds = array_map('intval', (array) $allowedNodeIds);
-
-            foreach ($nodeIds as $nodeId) {
-                if (! in_array($nodeId, $allowedNodeIds, true)) {
-                    $filteredOutCount++;
-                    Log::warning('Node selection rejected - not in whitelist', [
-                        'reseller_id' => $reseller->id,
-                        'panel_id' => $panel->id,
-                        'rejected_node_id' => $nodeId,
-                        'allowed_node_ids' => $allowedNodeIds,
-                    ]);
-                }
+        if ($this->isEylandooPanel($panel->panel_type)) {
+            $allowedNodeIds = null;
+            
+            // Try to get whitelist from pivot table first
+            if ($panelAccess && $panelAccess->allowed_node_ids) {
+                $allowedNodeIds = json_decode($panelAccess->allowed_node_ids, true) ?: [];
+                $allowedNodeIds = array_map('intval', (array) $allowedNodeIds);
+            } 
+            // Fallback to legacy reseller field
+            elseif ($reseller->eylandoo_allowed_node_ids) {
+                $allowedNodeIds = is_array($reseller->eylandoo_allowed_node_ids) 
+                    ? array_map('intval', $reseller->eylandoo_allowed_node_ids)
+                    : [];
             }
+            
+            // Validate if whitelist exists
+            if ($allowedNodeIds) {
+                foreach ($nodeIds as $nodeId) {
+                    if (! in_array($nodeId, $allowedNodeIds, true)) {
+                        $filteredOutCount++;
+                        Log::warning('Node selection rejected - not in whitelist', [
+                            'reseller_id' => $reseller->id,
+                            'panel_id' => $panel->id,
+                            'rejected_node_id' => $nodeId,
+                            'allowed_node_ids' => $allowedNodeIds,
+                        ]);
+                    }
+                }
 
-            if ($filteredOutCount > 0) {
-                return back()->with('error', 'One or more selected nodes are not allowed for your account.');
+                if ($filteredOutCount > 0) {
+                    return back()->with('error', 'One or more selected nodes are not allowed for your account.');
+                }
             }
         }
 
