@@ -9,6 +9,7 @@ use App\Models\Plan;
 use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
 use App\Services\ConfigNameGenerator;
+use App\Services\PanelDataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -72,77 +73,26 @@ class ConfigController extends Controller
                 ->with('error', 'No panels assigned to your account. Please contact support.');
         }
 
-        $marzneshinServices = [];
-        $nodesOptions = [];
-        $showNodesSelector = false;
+        // Use PanelDataService to get JS-friendly panels array with nodes/services
+        $panelDataService = new PanelDataService();
+        $panelsForJs = $panelDataService->getPanelsForReseller($reseller);
 
-        // If reseller has Marzneshin service whitelist (legacy field), fetch available services
+        // Determine prefill panel ID from old input or query param
+        $prefillPanelId = old('panel_id') ?? $request->query('panel_id') ?? null;
+
+        // Legacy: Keep marzneshin_services for backward compatibility (if needed)
+        // This can be removed if no other parts of the view depend on it
+        $marzneshin_services = [];
         if ($reseller->marzneshin_allowed_service_ids) {
-            $marzneshinServices = $reseller->marzneshin_allowed_service_ids;
-        }
-
-        // Fetch Eylandoo nodes for each Eylandoo panel
-        $eylandooFeaturesEnabled = config('app.eylandoo_features_enabled', env('EYLANDOO_FEATURES_ENABLED', true));
-
-        foreach ($panels as $panel) {
-            if ($eylandooFeaturesEnabled && $this->isEylandooPanel($panel->panel_type)) {
-                $showNodesSelector = true;
-
-                // Use cached method (5 minute cache) with null safety
-                $allNodes = [];
-                try {
-                    $allNodes = $panel->getCachedEylandooNodes() ?? [];
-                } catch (\Exception $e) {
-                    Log::warning('Failed to fetch Eylandoo nodes for panel', [
-                        'panel_id' => $panel->id,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-
-                if (! is_array($allNodes)) {
-                    $allNodes = [];
-                }
-
-                // Get allowed nodes from pivot table
-                $panelAccess = $reseller->panelAccess($panel->id);
-                $allowedNodeIds = $panelAccess ? json_decode($panelAccess->allowed_node_ids, true) : null;
-
-                // Filter nodes based on pivot whitelist
-                if ($allowedNodeIds && ! empty($allowedNodeIds)) {
-                    $allowedNodeIds = array_map('intval', (array) $allowedNodeIds);
-                    $nodes = array_filter($allNodes, function ($node) use ($allowedNodeIds) {
-                        if (! is_array($node) || ! isset($node['id'])) {
-                            return false;
-                        }
-                        return in_array((int) $node['id'], $allowedNodeIds, true);
-                    });
-                } else {
-                    $nodes = $allNodes;
-                }
-
-                // Set nodes for this panel
-                if (! empty($nodes)) {
-                    $nodesOptions[$panel->id] = array_values($nodes);
-                } else {
-                    // No nodes found - use default IDs 1 and 2
-                    $defaultNodeIds = config('panels.eylandoo.default_node_ids', [1, 2]);
-                    $nodesOptions[$panel->id] = array_map(function ($id) {
-                        return [
-                            'id' => (int) $id,
-                            'name' => "Node {$id} (default)",
-                            'is_default' => true,
-                        ];
-                    }, (array) $defaultNodeIds);
-                }
-            }
+            $marzneshin_services = $reseller->marzneshin_allowed_service_ids;
         }
 
         return view('reseller::configs.create', [
             'reseller' => $reseller,
             'panels' => $panels,
-            'marzneshin_services' => $marzneshinServices,
-            'nodesOptions' => $nodesOptions,
-            'showNodesSelector' => $showNodesSelector,
+            'panelsForJs' => $panelsForJs,
+            'prefillPanelId' => $prefillPanelId,
+            'marzneshin_services' => $marzneshin_services, // Legacy support
         ]);
     }
 
@@ -192,6 +142,20 @@ class ConfigController extends Controller
         }
 
         $panel = Panel::findOrFail($request->panel_id);
+        
+        // Panel-specific validation
+        $panelType = strtolower(trim($panel->panel_type ?? ''));
+        
+        // Validate that Eylandoo-specific fields are only sent for Eylandoo panels
+        if ($panelType !== 'eylandoo' && $request->filled('node_ids')) {
+            return back()->with('error', 'Node selection is only available for Eylandoo panels.');
+        }
+        
+        // Validate that Marzneshin-specific fields are only sent for Marzneshin panels
+        if ($panelType !== 'marzneshin' && $request->filled('service_ids')) {
+            return back()->with('error', 'Service selection is only available for Marzneshin panels.');
+        }
+        
         $expiresDays = $request->integer('expires_days');
         $trafficLimitBytes = (float) $request->input('traffic_limit_gb') * 1024 * 1024 * 1024;
         // Normalize to start of day for calendar-day boundaries
