@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Panel;
 use App\Models\Reseller;
 use App\Models\ResellerConfig;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -62,64 +63,75 @@ class ReenableResellerConfigsJob implements ShouldQueue
             'suspension_reason' => $this->suspensionReason,
         ]);
 
-        $panel = $this->reseller->primaryPanel ?? $this->reseller->panel;
-        $panelType = $panel ? strtolower(trim($panel->panel_type ?? '')) : null;
+        // Group configs by panel for efficient processing
+        $configsByPanel = $configs->groupBy('panel_id');
 
         $successCount = 0;
         $failCount = 0;
 
-        foreach ($configs as $config) {
-            try {
-                // For Eylandoo panels, attempt remote enable first (remote-first gating)
-                if ($panelType === 'eylandoo' && $panel) {
-                    try {
-                        $provisioner = $this->getEylandooProvisioner($panel);
-                        $remoteEnabled = $provisioner->enableUser($config->panel_user_id ?? $config->username);
+        foreach ($configsByPanel as $panelId => $panelConfigs) {
+            $panel = Panel::find($panelId);
+            
+            if (!$panel) {
+                Log::warning('Panel not found for configs', [
+                    'panel_id' => $panelId,
+                    'config_count' => $panelConfigs->count(),
+                ]);
+                $failCount += $panelConfigs->count();
+                continue;
+            }
 
-                        Log::info('eylandoo_remote_enable_' . ($remoteEnabled ? 'success' : 'failed'), [
+            $panelType = strtolower(trim($panel->panel_type ?? ''));
+
+            Log::info('reenable_panel_batch_start', [
+                'reseller_id' => $this->reseller->id,
+                'panel_id' => $panel->id,
+                'panel_type' => $panelType,
+                'config_count' => $panelConfigs->count(),
+            ]);
+
+            foreach ($panelConfigs as $config) {
+                try {
+                    // For all panels, attempt remote enable first (remote-first gating)
+                    $remoteEnabled = $this->enableConfigOnPanel($config, $panel);
+
+                    if ($remoteEnabled) {
+                        // Update local config status
+                        $config->status = 'active';
+                        
+                        // Clear suspension metadata
+                        $meta = $config->meta ?? [];
+                        unset($meta[$metaKey]);
+                        $config->meta = $meta;
+                        
+                        $config->save();
+
+                        Log::info('config_reenable_success', [
                             'reseller_id' => $this->reseller->id,
                             'config_id' => $config->id,
-                            'panel_user_id' => $config->panel_user_id,
+                            'panel_id' => $panel->id,
+                            'panel_type' => $panelType,
                         ]);
 
-                        if (!$remoteEnabled) {
-                            throw new \Exception('Remote enable failed for Eylandoo config');
-                        }
-                    } catch (\Exception $e) {
-                        Log::error('eylandoo_remote_enable_failed', [
+                        $successCount++;
+                    } else {
+                        Log::warning('config_reenable_remote_failed', [
                             'reseller_id' => $this->reseller->id,
                             'config_id' => $config->id,
-                            'error' => $e->getMessage(),
+                            'panel_id' => $panel->id,
+                            'panel_type' => $panelType,
                         ]);
                         $failCount++;
-                        continue; // Don't update local state if remote enable failed
                     }
+                } catch (\Exception $e) {
+                    Log::error('config_reenable_failed', [
+                        'reseller_id' => $this->reseller->id,
+                        'config_id' => $config->id,
+                        'panel_id' => $panel->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $failCount++;
                 }
-
-                // Update local config status
-                $config->status = 'active';
-                
-                // Clear suspension metadata
-                $meta = $config->meta ?? [];
-                unset($meta[$metaKey]);
-                $config->meta = $meta;
-                
-                $config->save();
-
-                Log::info('config_reenable_success', [
-                    'reseller_id' => $this->reseller->id,
-                    'config_id' => $config->id,
-                    'panel_type' => $panelType,
-                ]);
-
-                $successCount++;
-            } catch (\Exception $e) {
-                Log::error('config_reenable_failed', [
-                    'reseller_id' => $this->reseller->id,
-                    'config_id' => $config->id,
-                    'error' => $e->getMessage(),
-                ]);
-                $failCount++;
             }
         }
 
@@ -132,16 +144,35 @@ class ReenableResellerConfigsJob implements ShouldQueue
     }
 
     /**
-     * Get Eylandoo provisioner instance
+     * Enable a config on its remote panel
+     *
+     * @param ResellerConfig $config
+     * @param Panel $panel
+     * @return bool True if enabled successfully
      */
-    protected function getEylandooProvisioner($panel)
+    protected function enableConfigOnPanel(ResellerConfig $config, Panel $panel): bool
     {
+        $panelType = strtolower(trim($panel->panel_type ?? ''));
         $credentials = $panel->getCredentials();
-        
-        return new \App\Provisioners\EylandooProvisioner(
-            $credentials['url'],
-            $credentials['api_token'],
-            $credentials['extra']['node_hostname'] ?? ''
-        );
+
+        try {
+            // Use ResellerProvisioner's enableUser method
+            $provisioner = new \Modules\Reseller\Services\ResellerProvisioner();
+            $result = $provisioner->enableUser(
+                $panel->panel_type,
+                $credentials,
+                $config->panel_user_id
+            );
+
+            return $result['success'] ?? false;
+        } catch (\Exception $e) {
+            Log::error('Exception enabling config on panel', [
+                'config_id' => $config->id,
+                'panel_id' => $panel->id,
+                'panel_type' => $panelType,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 }

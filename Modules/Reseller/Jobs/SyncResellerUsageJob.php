@@ -11,6 +11,7 @@ use App\Models\Setting;
 use App\Services\EylandooService;
 use App\Services\MarzbanService;
 use App\Services\MarzneshinService;
+use App\Services\MultiPanelUsageAggregator;
 use App\Services\XUIService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -106,6 +107,78 @@ class SyncResellerUsageJob implements ShouldBeUnique, ShouldQueue
     protected function syncResellerUsage(Reseller $reseller): int
     {
         Log::info("Syncing usage for reseller {$reseller->id}");
+
+        // Use multi-panel aggregator if enabled
+        if (config('multi_panel.usage_enabled', true)) {
+            return $this->syncResellerUsageMultiPanel($reseller);
+        }
+
+        // Legacy single-panel logic
+        return $this->syncResellerUsageLegacy($reseller);
+    }
+
+    /**
+     * Multi-panel usage sync with aggregation
+     */
+    protected function syncResellerUsageMultiPanel(Reseller $reseller): int
+    {
+        $aggregator = new MultiPanelUsageAggregator();
+        $result = $aggregator->aggregateUsage($reseller);
+
+        // Update reseller's total usage
+        $aggregator->updateResellerTotalUsage($reseller, $result['total_usage_bytes']);
+
+        // Skip quota/window enforcement for wallet-based resellers
+        if ($reseller->isWalletBased()) {
+            Log::info("Skipping quota/window enforcement for wallet-based reseller {$reseller->id}");
+            return 0; // Return 0 as we're not tracking Eylandoo count separately anymore
+        }
+
+        // Check reseller-level limits with grace (traffic-based resellers only)
+        $resellerGrace = $this->getResellerGraceSettings();
+        $effectiveResellerLimit = $this->applyGrace(
+            $reseller->traffic_total_bytes,
+            $resellerGrace['percent'],
+            $resellerGrace['bytes']
+        );
+
+        $effectiveUsageBytes = $result['total_usage_bytes'];
+        $hasTrafficRemaining = $effectiveUsageBytes < $effectiveResellerLimit;
+        $isWindowValid = $reseller->isWindowValid();
+
+        if (! $hasTrafficRemaining || ! $isWindowValid) {
+            // Suspend the reseller if not already suspended
+            if ($reseller->status !== 'suspended') {
+                $reason = ! $hasTrafficRemaining ? 'reseller_quota_exhausted' : 'reseller_window_expired';
+                $reseller->update(['status' => 'suspended']);
+                Log::info("Reseller {$reseller->id} suspended due to quota/window exhaustion");
+
+                // Create audit log for reseller suspension
+                AuditLog::log(
+                    action: 'reseller_suspended',
+                    targetType: 'reseller',
+                    targetId: $reseller->id,
+                    reason: $reason,
+                    meta: [
+                        'traffic_used_bytes' => $effectiveUsageBytes,
+                        'traffic_total_bytes' => $reseller->traffic_total_bytes,
+                        'window_ends_at' => $reseller->window_ends_at?->toDateTimeString(),
+                    ],
+                    actorType: null,
+                    actorId: null  // System action
+                );
+            }
+            $this->disableResellerConfigs($reseller);
+        }
+
+        return 0; // Return 0 as we're not tracking Eylandoo count separately
+    }
+
+    /**
+     * Legacy single-panel usage sync (backward compatibility)
+     */
+    protected function syncResellerUsageLegacy(Reseller $reseller): int
+    {
 
         $configs = $reseller->configs()
             ->where('status', 'active')
