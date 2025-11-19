@@ -74,7 +74,7 @@ class ConfigController extends Controller
         }
 
         // Use PanelDataService to get JS-friendly panels array with nodes/services
-        $panelDataService = new PanelDataService();
+        $panelDataService = new PanelDataService;
         $panelsForJs = $panelDataService->getPanelsForReseller($reseller);
 
         // Determine prefill panel ID from old input or query param
@@ -138,29 +138,29 @@ class ConfigController extends Controller
 
         // Validate reseller has access to the selected panel
         // Support both new pivot table approach and legacy panel_id field
-        $hasAccess = $reseller->hasPanelAccess($request->panel_id) 
-            || $reseller->panel_id == $request->panel_id 
+        $hasAccess = $reseller->hasPanelAccess($request->panel_id)
+            || $reseller->panel_id == $request->panel_id
             || $reseller->primary_panel_id == $request->panel_id;
-            
-        if (!$hasAccess) {
+
+        if (! $hasAccess) {
             return back()->with('error', 'You do not have access to the selected panel.');
         }
 
         $panel = Panel::findOrFail($request->panel_id);
-        
+
         // Panel-specific validation
         $panelType = strtolower(trim($panel->panel_type ?? ''));
-        
+
         // Validate that Eylandoo-specific fields are only sent for Eylandoo panels
         if ($panelType !== 'eylandoo' && $request->filled('node_ids')) {
             return back()->with('error', 'Node selection is only available for Eylandoo panels.');
         }
-        
+
         // Validate that Marzneshin-specific fields are only sent for Marzneshin panels
         if ($panelType !== 'marzneshin' && $request->filled('service_ids')) {
             return back()->with('error', 'Service selection is only available for Marzneshin panels.');
         }
-        
+
         $expiresDays = $request->integer('expires_days');
         $trafficLimitBytes = (float) $request->input('traffic_limit_gb') * 1024 * 1024 * 1024;
         // Normalize to start of day for calendar-day boundaries
@@ -168,7 +168,7 @@ class ConfigController extends Controller
 
         // Validate nodes/services based on pivot whitelist
         $panelAccess = $reseller->panelAccess($panel->id);
-        
+
         // Validate Marzneshin service whitelist from pivot
         if ($panel->panel_type === 'marzneshin' && $panelAccess && $panelAccess->allowed_service_ids) {
             $serviceIds = $request->service_ids ?? [];
@@ -187,19 +187,19 @@ class ConfigController extends Controller
 
         if ($this->isEylandooPanel($panel->panel_type)) {
             $allowedNodeIds = null;
-            
+
             // Try to get whitelist from pivot table first
             if ($panelAccess && $panelAccess->allowed_node_ids) {
                 $allowedNodeIds = json_decode($panelAccess->allowed_node_ids, true) ?: [];
                 $allowedNodeIds = array_map('intval', (array) $allowedNodeIds);
-            } 
+            }
             // Fallback to legacy reseller field
             elseif ($reseller->eylandoo_allowed_node_ids) {
-                $allowedNodeIds = is_array($reseller->eylandoo_allowed_node_ids) 
+                $allowedNodeIds = is_array($reseller->eylandoo_allowed_node_ids)
                     ? array_map('intval', $reseller->eylandoo_allowed_node_ids)
                     : [];
             }
-            
+
             // Validate if whitelist exists
             if ($allowedNodeIds) {
                 foreach ($nodeIds as $nodeId) {
@@ -271,14 +271,14 @@ class ConfigController extends Controller
                 $nameVersion = null; // Custom names don't have a version
             } else {
                 // Use ConfigNameGenerator to generate name
-                $generator = new ConfigNameGenerator();
-                
+                $generator = new ConfigNameGenerator;
+
                 // Build options array for generator
                 $generatorOptions = [];
                 if ($prefix) {
                     $generatorOptions['prefix'] = $prefix;
                 }
-                
+
                 $nameData = $generator->generate($reseller, $panel, $reseller->type, $generatorOptions);
                 $username = $nameData['name'];
                 $nameVersion = $nameData['version'];
