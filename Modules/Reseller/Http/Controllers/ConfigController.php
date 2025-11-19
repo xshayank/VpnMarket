@@ -67,7 +67,32 @@ class ConfigController extends Controller
         // Get panels the reseller has access to via the pivot table
         $panels = $reseller->panels()->where('is_active', true)->get();
 
-        // If no panels available, show error
+        // If no panels available, try to auto-attach primary panel
+        if ($panels->isEmpty() && $reseller->primary_panel_id) {
+            $primaryPanel = Panel::where('id', $reseller->primary_panel_id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($primaryPanel) {
+                // Auto-attach primary panel to reseller with empty allowed lists
+                $reseller->panels()->attach($primaryPanel->id, [
+                    'allowed_node_ids' => null,
+                    'allowed_service_ids' => null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                Log::info('Auto-attached primary panel to reseller', [
+                    'reseller_id' => $reseller->id,
+                    'panel_id' => $primaryPanel->id,
+                ]);
+
+                // Reload panels after attachment
+                $panels = $reseller->panels()->where('is_active', true)->get();
+            }
+        }
+
+        // If still no panels available, show error
         if ($panels->isEmpty()) {
             return redirect()->route('reseller.dashboard')
                 ->with('error', 'No panels assigned to your account. Please contact support.');
