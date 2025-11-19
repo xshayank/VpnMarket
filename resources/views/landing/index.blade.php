@@ -88,7 +88,7 @@
 <div class="container">
     <header class="hero">
         <div>
-            <div class="pill">فالکو پنل • نماینده OpenVPN / V2Ray • پشتیبانی ۲۴/۷</div>
+            <div class="pill">فالکو پنل • OpenVPN و V2Ray در یک پلتفرم • پشتیبانی ۲۴/۷</div>
             <h1>{{ $homepage['hero_title'] }}</h1>
             <p class="subtitle">{{ $homepage['hero_subtitle'] }}</p>
             <div class="cta-row">
@@ -127,13 +127,13 @@
     <section class="section">
         <div class="section-header">
             <h2>چطور کار می‌کند؟</h2>
-            <p class="lead">در سه مرحله ساده نماینده شوید و فروش را آغاز کنید.</p>
+            <p class="lead">در سه مرحله ساده نماینده شوید و به هر دو پروتکل OpenVPN و V2Ray دسترسی داشته باشید.</p>
         </div>
         <div class="grid steps-grid">
             <div class="card"><div class="panel-tag">۱</div><h3>ثبت‌نام سریع</h3><p class="muted">فرم ثبت‌نام را پر کنید و نوع نماینده (کیف پول یا ترافیک) را انتخاب نمایید.</p></div>
-            <div class="card"><div class="panel-tag">۲</div><h3>انتخاب پنل اصلی</h3><p class="muted">از بین Eylandoo، Marzneshin و Marzban پنل مناسب خود را برگزینید.</p></div>
+            <div class="card"><div class="panel-tag">۲</div><h3>دسترسی به همه پنل‌ها</h3><p class="muted">به طور خودکار به تمام پنل‌های فعال (Eylandoo، Marzneshin و Marzban) دسترسی پیدا کنید.</p></div>
             <div class="card"><div class="panel-tag">۳</div><h3>شارژ اولیه</h3><p class="muted">کیف پول را شارژ کنید یا ترافیک اولیه را خریداری کنید تا حساب فعال شود.</p></div>
-            <div class="card"><div class="panel-tag">۴</div><h3>ساخت کانفیگ</h3><p class="muted">کانفیگ‌ها را بسازید، بفروشید و وضعیت مصرف را زنده مشاهده کنید.</p></div>
+            <div class="card"><div class="panel-tag">۴</div><h3>ساخت کانفیگ</h3><p class="muted">از هر پنل که بخواهید کانفیگ بسازید، بفروشید و وضعیت مصرف را زنده مشاهده کنید.</p></div>
         </div>
     </section>
 
@@ -141,7 +141,7 @@
     <section class="section" id="panels">
         <div class="section-header">
             <h2>پنل‌های پشتیبانی‌شده</h2>
-            <p class="lead">سازگار با محبوب‌ترین پنل‌ها؛ روی زیرساخت پایدار ما میزبانی می‌شوند.</p>
+            <p class="lead">هر دو پروتکل OpenVPN و V2Ray در یک پلتفرم یکپارچه؛ میزبانی شده روی زیرساخت پایدار ما.</p>
         </div>
         <div class="grid panels-grid">
             @foreach($panels as $panel)
