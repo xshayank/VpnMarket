@@ -7,7 +7,73 @@
         </div>
     </x-slot>
 
-    <div class="py-6 md:py-12" x-data="configForm(@js($panelsForJs), {{ $prefillPanelId ?? 'null' }})">
+    <script>
+        // Define Alpine component factory before x-data initialization
+        window.configForm = function(panels, initialPanelId) {
+            return {
+                panels: panels || [],
+                selectedPanelId: initialPanelId ? String(initialPanelId) : '',
+                nodeSelections: [],
+                serviceSelections: [],
+                maxClients: {{ old('max_clients', 1) }},
+                
+                get selectedPanel() {
+                    if (!this.selectedPanelId) return null;
+                    return this.panels.find(p => String(p.id) === String(this.selectedPanelId)) || null;
+                },
+                
+                init() {
+                    // Watch for panel changes
+                    this.$watch('selectedPanelId', (newValue, oldValue) => {
+                        if (newValue !== oldValue) {
+                            // Clear selections when switching panels
+                            this.nodeSelections = [];
+                            this.serviceSelections = [];
+                            
+                            // Reset max_clients to default
+                            if (this.selectedPanel && this.selectedPanel.panel_type !== 'eylandoo') {
+                                this.maxClients = 1;
+                            }
+                        }
+                    });
+                },
+                
+                async refreshPanelData(panelId) {
+                    if (!panelId) return;
+                    
+                    try {
+                        const response = await fetch(`/reseller/panels/${panelId}/data`, {
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch panel data');
+                        }
+                        
+                        const data = await response.json();
+                        
+                        // Update the panel data in the panels array
+                        const panelIndex = this.panels.findIndex(p => p.id === panelId);
+                        if (panelIndex !== -1) {
+                            this.panels[panelIndex] = data;
+                            
+                            // Clear selections since data has changed
+                            this.nodeSelections = [];
+                            this.serviceSelections = [];
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing panel data:', error);
+                        alert('خطا در دریافت اطلاعات پنل. لطفا دوباره تلاش کنید.');
+                    }
+                }
+            };
+        };
+    </script>
+
+    <div class="py-6 md:py-12" x-data="configForm(@js($panelsForJs), {{ $prefillPanelId ?? 'null' }})"
         <div class="max-w-3xl mx-auto px-3 sm:px-6 lg:px-8">
             
             <x-reseller-back-button :fallbackRoute="route('reseller.configs.index')" />
@@ -185,71 +251,4 @@
             </div>
         </div>
     </div>
-
-    @push('scripts')
-    <script>
-        function configForm(panels, initialPanelId) {
-            return {
-                panels: panels || [],
-                selectedPanelId: initialPanelId ? String(initialPanelId) : '',
-                nodeSelections: [],
-                serviceSelections: [],
-                maxClients: {{ old('max_clients', 1) }},
-                
-                get selectedPanel() {
-                    if (!this.selectedPanelId) return null;
-                    return this.panels.find(p => String(p.id) === String(this.selectedPanelId)) || null;
-                },
-                
-                init() {
-                    // Watch for panel changes
-                    this.$watch('selectedPanelId', (newValue, oldValue) => {
-                        if (newValue !== oldValue) {
-                            // Clear selections when switching panels
-                            this.nodeSelections = [];
-                            this.serviceSelections = [];
-                            
-                            // Reset max_clients to default
-                            if (this.selectedPanel && this.selectedPanel.panel_type !== 'eylandoo') {
-                                this.maxClients = 1;
-                            }
-                        }
-                    });
-                },
-                
-                async refreshPanelData(panelId) {
-                    if (!panelId) return;
-                    
-                    try {
-                        const response = await fetch(`/reseller/panels/${panelId}/data`, {
-                            headers: {
-                                'Accept': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error('Failed to fetch panel data');
-                        }
-                        
-                        const data = await response.json();
-                        
-                        // Update the panel data in the panels array
-                        const panelIndex = this.panels.findIndex(p => p.id === panelId);
-                        if (panelIndex !== -1) {
-                            this.panels[panelIndex] = data;
-                            
-                            // Clear selections since data has changed
-                            this.nodeSelections = [];
-                            this.serviceSelections = [];
-                        }
-                    } catch (error) {
-                        console.error('Error refreshing panel data:', error);
-                        alert('خطا در دریافت اطلاعات پنل. لطفا دوباره تلاش کنید.');
-                    }
-                }
-            };
-        }
-    </script>
-    @endpush
 </x-app-layout>
