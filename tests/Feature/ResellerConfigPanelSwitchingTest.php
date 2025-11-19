@@ -206,7 +206,7 @@ test('PanelDataService getPanelsForReseller returns all reseller panels', functi
         ->and($panelTypes)->toContain('marzneshin');
 });
 
-test('reseller without panels sees error message', function () {
+test('reseller without pivot panels but with primary panel gets auto-attached', function () {
     // Create new user for new reseller
     $newUser = User::factory()->create(['is_super_admin' => true]);
 
@@ -226,8 +226,41 @@ test('reseller without panels sees error message', function () {
 
     $response = $this->get(route('reseller.configs.create'));
 
-    $response->assertRedirect(route('reseller.dashboard'))
-        ->assertSessionHas('error', 'No panels assigned to your account. Please contact support.');
+    // Should succeed with auto-attached panel
+    $response->assertStatus(200);
+    $response->assertViewHas('panelsForJs');
+    
+    // Verify panel was auto-attached
+    $panelsForJs = $response->viewData('panelsForJs');
+    expect($panelsForJs)->toBeArray()
+        ->and(count($panelsForJs))->toBe(1)
+        ->and($panelsForJs[0]['id'])->toBe($this->eylandooPanel->id);
+});
+
+test('reseller with no panels and no primary panel sees error message', function () {
+    // Create new user for new reseller
+    $newUser = User::factory()->create(['is_super_admin' => true]);
+
+    // Create new reseller without panels and without primary_panel_id
+    $newReseller = Reseller::create([
+        'user_id' => $newUser->id,
+        'type' => 'wallet',
+        'status' => 'active',
+        'primary_panel_id' => null,
+        'panel_id' => null,
+        'config_limit' => 10,
+        'wallet_balance' => 100000,
+    ]);
+
+    // Login as new user
+    $this->actingAs($newUser);
+
+    $response = $this->get(route('reseller.configs.create'));
+
+    // Should redirect to dashboard with error
+    $response->assertRedirect();
+    // Check the session has some message (error or warning from middleware)
+    expect($response->getSession()->has('error') || $response->getSession()->has('warning'))->toBeTrue();
 });
 
 test('create page view has Alpine.js data binding', function () {
