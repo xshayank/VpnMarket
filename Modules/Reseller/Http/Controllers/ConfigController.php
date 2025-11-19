@@ -80,6 +80,20 @@ class ConfigController extends Controller
         // Determine prefill panel ID from old input or query param
         $prefillPanelId = old('panel_id') ?? $request->query('panel_id') ?? null;
 
+        // Log panel data fetch for debugging
+        if ($prefillPanelId) {
+            $selectedPanel = collect($panelsForJs)->firstWhere('id', (int) $prefillPanelId);
+            if ($selectedPanel) {
+                Log::info('config_create_panel_prefilled', [
+                    'reseller_id' => $reseller->id,
+                    'panel_id' => $prefillPanelId,
+                    'panel_type' => $selectedPanel['panel_type'],
+                    'nodes_count' => count($selectedPanel['nodes'] ?? []),
+                    'services_count' => count($selectedPanel['services'] ?? []),
+                ]);
+            }
+        }
+
         // Legacy: Keep marzneshin_services for backward compatibility (if needed)
         // This can be removed if no other parts of the view depend on it
         $marzneshin_services = [];
@@ -150,6 +164,15 @@ class ConfigController extends Controller
 
         // Panel-specific validation
         $panelType = strtolower(trim($panel->panel_type ?? ''));
+
+        // Log config creation with panel selection
+        Log::info('config_create_panel_selected', [
+            'reseller_id' => $reseller->id,
+            'panel_id' => $panel->id,
+            'panel_type' => $panelType,
+            'node_ids_count' => count($request->node_ids ?? []),
+            'service_ids_count' => count($request->service_ids ?? []),
+        ]);
 
         // Validate that Eylandoo-specific fields are only sent for Eylandoo panels
         if ($panelType !== 'eylandoo' && $request->filled('node_ids')) {
