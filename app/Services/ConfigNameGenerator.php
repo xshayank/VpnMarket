@@ -17,10 +17,11 @@ class ConfigNameGenerator
      * @param Reseller $reseller The reseller who owns the config
      * @param Panel $panel The panel where the config will be created
      * @param string $mode The reseller mode ('wallet' or 'traffic')
+     * @param array $options Optional parameters: 'prefix' => custom prefix to use instead of config default
      * @return array ['name' => string, 'version' => int]
      * @throws \Exception If unable to generate a unique name after retries
      */
-    public function generate(Reseller $reseller, Panel $panel, string $mode): array
+    public function generate(Reseller $reseller, Panel $panel, string $mode, array $options = []): array
     {
         // Check if new naming system is enabled
         if (!config('config_names.enabled', false)) {
@@ -32,7 +33,7 @@ class ConfigNameGenerator
 
         for ($attempt = 1; $attempt <= $retryLimit; $attempt++) {
             try {
-                return DB::transaction(function () use ($reseller, $panel, $mode, $attempt) {
+                return DB::transaction(function () use ($reseller, $panel, $mode, $options, $attempt) {
                     // Lock and get/create sequence record
                     $sequence = ConfigNameSequence::lockForUpdate()
                         ->firstOrCreate(
@@ -47,8 +48,8 @@ class ConfigNameGenerator
                     $seq = $sequence->next_seq;
                     $sequence->increment('next_seq');
 
-                    // Build the name
-                    $name = $this->buildName($reseller, $panel, $mode, $seq);
+                    // Build the name with options
+                    $name = $this->buildName($reseller, $panel, $mode, $seq, $options);
 
                     // Check if name is unique (shouldn't happen, but safety check)
                     if (ResellerConfig::where('external_username', $name)->exists()) {
@@ -75,6 +76,7 @@ class ConfigNameGenerator
                         'name' => $name,
                         'mode' => $mode,
                         'seq' => $seq,
+                        'custom_prefix' => $options['prefix'] ?? null,
                     ]);
 
                     return [
@@ -113,12 +115,13 @@ class ConfigNameGenerator
      * @param Panel $panel
      * @param string $mode
      * @param int $seq
+     * @param array $options Optional parameters: 'prefix' => custom prefix to use
      * @return string
      */
-    protected function buildName(Reseller $reseller, Panel $panel, string $mode, int $seq): string
+    protected function buildName(Reseller $reseller, Panel $panel, string $mode, int $seq, array $options = []): string
     {
-        // Get prefix (default: FP)
-        $prefix = config('config_names.prefix', 'FP');
+        // Get prefix - use custom prefix from options if provided, otherwise use config default
+        $prefix = $options['prefix'] ?? config('config_names.prefix', 'FP');
 
         // Get panel type code
         $panelType = strtolower($panel->panel_type ?? 'xui');

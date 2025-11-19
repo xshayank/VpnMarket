@@ -321,7 +321,14 @@ class ConfigController extends Controller
             } else {
                 // Use ConfigNameGenerator to generate name
                 $generator = new ConfigNameGenerator();
-                $nameData = $generator->generate($reseller, $panel, $reseller->type);
+                
+                // Build options array for generator
+                $generatorOptions = [];
+                if ($prefix) {
+                    $generatorOptions['prefix'] = $prefix;
+                }
+                
+                $nameData = $generator->generate($reseller, $panel, $reseller->type, $generatorOptions);
                 $username = $nameData['name'];
                 $nameVersion = $nameData['version'];
             }
