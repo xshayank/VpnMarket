@@ -8,7 +8,7 @@ use App\Models\User;
 use App\Services\ConfigNameGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
-uses(RefreshDatabase::class);
+uses(Tests\TestCase::class, RefreshDatabase::class);
 
 beforeEach(function () {
     // Create test user
@@ -95,8 +95,9 @@ test('generates correct mode codes', function () {
     ];
     
     foreach ($modes as $mode => $expectedCode) {
+        $user = User::factory()->create();
         $reseller = Reseller::create([
-            'user_id' => $this->user->id,
+            'user_id' => $user->id,
             'type' => $mode,
             'status' => 'active',
             'primary_panel_id' => $this->panel->id,
@@ -136,8 +137,10 @@ test('sequence increments correctly', function () {
 test('generates unique names for different resellers', function () {
     config(['config_names.enabled' => true]);
     
+    $user2 = User::factory()->create();
+    
     $reseller2 = Reseller::create([
-        'user_id' => $this->user->id,
+        'user_id' => $user2->id,
         'type' => 'wallet',
         'status' => 'active',
         'primary_panel_id' => $this->panel->id,
@@ -193,9 +196,11 @@ test('auto-generates short_code for reseller if missing', function () {
 test('short_code generation uses base36 encoding', function () {
     config(['config_names.enabled' => true]);
     
+    $user2 = User::factory()->create();
+    
     // Create reseller with specific ID
     $reseller = Reseller::create([
-        'user_id' => $this->user->id,
+        'user_id' => $user2->id,
         'type' => 'wallet',
         'status' => 'active',
         'primary_panel_id' => $this->panel->id,

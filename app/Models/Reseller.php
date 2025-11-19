@@ -25,6 +25,7 @@ class Reseller extends Model
         'type',
         'status',
         'username_prefix',
+        'short_code',
         'panel_id',
         'primary_panel_id',
         'config_limit',
