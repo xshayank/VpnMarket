@@ -50,10 +50,12 @@ class MultiPanelUsageAggregator
             try {
                 $panelUsage = $this->fetchPanelUsage($reseller, $panel);
                 $totalUsageBytes += $panelUsage['total_usage_bytes'];
-                $panelsProcessed++;
 
                 // Update snapshot
                 $this->updateSnapshot($reseller, $panel, $panelUsage);
+
+                // Only increment counter after successful processing
+                $panelsProcessed++;
 
                 Log::info('panel_usage_fetched', [
                     'reseller_id' => $reseller->id,

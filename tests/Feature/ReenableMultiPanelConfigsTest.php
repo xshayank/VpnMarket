@@ -87,8 +87,19 @@ class ReenableMultiPanelConfigsTest extends TestCase
         // Mock HTTP - successful enable on both panels
         Http::fake([
             'https://panel1.com/api/admins/token' => Http::response(['access_token' => 'token1'], 200),
+            'https://panel1.com/api/users/user1' => Http::response([
+                'username' => 'user1',
+                'status' => 'disabled',
+            ], 200),
             'https://panel1.com/api/users/user1/enable' => Http::response([], 200),
-            'https://panel2.com/api/v1/users/user2/enable' => Http::response([], 200),
+            'https://panel1.com/api/users/user1/status' => Http::response(['status' => 'active'], 200),
+            'https://panel2.com/api/v1/users/user2' => Http::response([
+                'userInfo' => [
+                    'username' => 'user2',
+                    'is_active' => false,
+                ],
+            ], 200),
+            'https://panel2.com/api/v1/users/user2/toggle' => Http::response(['success' => true], 200),
         ]);
 
         // Run re-enable service
@@ -166,8 +177,19 @@ class ReenableMultiPanelConfigsTest extends TestCase
 
         Http::fake([
             'https://panel1.com/api/admins/token' => Http::response(['access_token' => 'token'], 200),
+            'https://panel1.com/api/users/user1' => Http::response([
+                'username' => 'user1',
+                'status' => 'disabled',
+            ], 200),
             'https://panel1.com/api/users/user1/enable' => Http::response([], 200),
-            'https://panel2.com/api/v1/users/user2/enable' => Http::response([], 200),
+            'https://panel1.com/api/users/user1/status' => Http::response(['status' => 'active'], 200),
+            'https://panel2.com/api/v1/users/user2' => Http::response([
+                'userInfo' => [
+                    'username' => 'user2',
+                    'is_active' => false,
+                ],
+            ], 200),
+            'https://panel2.com/api/v1/users/user2/toggle' => Http::response(['success' => true], 200),
         ]);
 
         // Run re-enable job

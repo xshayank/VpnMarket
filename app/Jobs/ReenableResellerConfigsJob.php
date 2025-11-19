@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Panel;
 use App\Models\Reseller;
 use App\Models\ResellerConfig;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -152,33 +153,18 @@ class ReenableResellerConfigsJob implements ShouldQueue
     protected function enableConfigOnPanel(ResellerConfig $config, Panel $panel): bool
     {
         $panelType = strtolower(trim($panel->panel_type ?? ''));
+        $credentials = $panel->getCredentials();
 
         try {
-            switch ($panelType) {
-                case 'eylandoo':
-                    $provisioner = $this->getEylandooProvisioner($panel);
-                    return $provisioner->enableUser($config->panel_user_id ?? $config->external_username);
+            // Use ResellerProvisioner's enableUser method
+            $provisioner = new \Modules\Reseller\Services\ResellerProvisioner();
+            $result = $provisioner->enableUser(
+                $panel->panel_type,
+                $credentials,
+                $config->panel_user_id
+            );
 
-                case 'marzneshin':
-                    $provisioner = $this->getMarzneshinProvisioner($panel);
-                    return $provisioner->enableUser($config->panel_user_id);
-
-                case 'marzban':
-                    $provisioner = $this->getMarzbanProvisioner($panel);
-                    return $provisioner->enableUser($config->panel_user_id);
-
-                case 'xui':
-                case '3x-ui':
-                    $provisioner = $this->getXUIProvisioner($panel);
-                    return $provisioner->enableUser($config->panel_user_id);
-
-                default:
-                    Log::warning('Unknown panel type for re-enable', [
-                        'panel_type' => $panelType,
-                        'panel_id' => $panel->id,
-                    ]);
-                    return false;
-            }
+            return $result['success'] ?? false;
         } catch (\Exception $e) {
             Log::error('Exception enabling config on panel', [
                 'config_id' => $config->id,
@@ -188,62 +174,5 @@ class ReenableResellerConfigsJob implements ShouldQueue
             ]);
             return false;
         }
-    }
-
-    /**
-     * Get Eylandoo provisioner instance
-     */
-    protected function getEylandooProvisioner($panel)
-    {
-        $credentials = $panel->getCredentials();
-        
-        return new \App\Provisioners\EylandooProvisioner(
-            $credentials['url'],
-            $credentials['api_token'],
-            $credentials['extra']['node_hostname'] ?? ''
-        );
-    }
-
-    /**
-     * Get Marzneshin provisioner instance
-     */
-    protected function getMarzneshinProvisioner($panel)
-    {
-        $credentials = $panel->getCredentials();
-        
-        return new \App\Provisioners\MarzneshinProvisioner(
-            $credentials['url'],
-            $credentials['username'],
-            $credentials['password'],
-            $credentials['extra']['node_hostname'] ?? ''
-        );
-    }
-
-    /**
-     * Get Marzban provisioner instance
-     */
-    protected function getMarzbanProvisioner($panel)
-    {
-        $credentials = $panel->getCredentials();
-        
-        return new \App\Provisioners\MarzbanProvisioner(
-            $credentials['url'],
-            $credentials['username'],
-            $credentials['password']
-        );
-    }
-
-    /**
-     * Get XUI provisioner instance
-     */
-    protected function getXUIProvisioner($panel)
-    {
-        $credentials = $panel->getCredentials();
-        
-        return new \App\Provisioners\XUIProvisioner(
-            $credentials['url'],
-            $credentials['username'],
-            $credentials['password']
-        );
     }
 }

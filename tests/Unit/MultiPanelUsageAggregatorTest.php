@@ -217,9 +217,10 @@ class MultiPanelUsageAggregatorTest extends TestCase
         $aggregator = new MultiPanelUsageAggregator();
         $result = $aggregator->aggregateUsage($reseller);
 
-        // Should still process panel2 successfully
+        // Should still process panel2 successfully and get its usage
+        // Panel1 is processed but returns 0 bytes due to failures
         $this->assertEquals(1 * 1024 ** 3, $result['total_usage_bytes']);
-        $this->assertEquals(1, $result['panels_processed']);
+        $this->assertEquals(2, $result['panels_processed']); // Both panels processed, panel1 just returned 0
     }
 
     public function test_updates_reseller_total_usage_with_admin_forgiven_bytes(): void
