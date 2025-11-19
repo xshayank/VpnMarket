@@ -15,6 +15,7 @@ class ResellerConfig extends Model
     protected $fillable = [
         'reseller_id',
         'external_username',
+        'name_version',
         'comment',
         'prefix',
         'custom_name',
@@ -36,6 +37,7 @@ class ResellerConfig extends Model
         'traffic_limit_bytes' => 'integer',
         'connections' => 'integer',
         'usage_bytes' => 'integer',
+        'name_version' => 'integer',
         'expires_at' => 'datetime',
         'disabled_at' => 'datetime',
         'meta' => 'array',
