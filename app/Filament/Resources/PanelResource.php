@@ -71,6 +71,12 @@ class PanelResource extends Resource
                     ->label('فعال')
                     ->default(true),
                 
+                Forms\Components\Toggle::make('auto_assign_to_resellers')
+                    ->label('اتصال خودکار به همه ریسلرها')
+                    ->helperText('با فعالسازی، این پنل به همه ریسلرهای فعلی و جدید اختصاص می‌یابد.')
+                    ->default(false)
+                    ->reactive(),
+                
                 // Eylandoo panel: Default Nodes for New Resellers
                 Forms\Components\Select::make('registration_default_node_ids')
                     ->label('نودهای پیش‌فرض برای نمایندگان جدید (Eylandoo)')

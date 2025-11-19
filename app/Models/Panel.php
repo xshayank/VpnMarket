@@ -20,6 +20,7 @@ class Panel extends Model
         'api_token',
         'extra',
         'is_active',
+        'auto_assign_to_resellers',
         'registration_default_node_ids',
         'registration_default_service_ids',
     ];
@@ -27,6 +28,7 @@ class Panel extends Model
     protected $casts = [
         'extra' => 'array',
         'is_active' => 'boolean',
+        'auto_assign_to_resellers' => 'boolean',
         'registration_default_node_ids' => 'array',
         'registration_default_service_ids' => 'array',
     ];
@@ -61,6 +63,14 @@ class Panel extends Model
     public function plans()
     {
         return $this->hasMany(Plan::class);
+    }
+
+    /**
+     * Scope to get panels with auto-assign enabled
+     */
+    public function scopeAutoAssign($query)
+    {
+        return $query->where('auto_assign_to_resellers', true);
     }
 
     /**

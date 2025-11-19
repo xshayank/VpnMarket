@@ -144,6 +144,32 @@ class Reseller extends Model
         return $this->hasMany(ResellerUsageSnapshot::class);
     }
 
+    /**
+     * Many-to-many relationship with panels via pivot table
+     */
+    public function panels(): BelongsToMany
+    {
+        return $this->belongsToMany(Panel::class, 'reseller_panel_access', 'reseller_id', 'panel_id')
+            ->withPivot(['allowed_node_ids', 'allowed_service_ids'])
+            ->withTimestamps();
+    }
+
+    /**
+     * Check if reseller has access to a specific panel
+     */
+    public function hasPanelAccess(int $panelId): bool
+    {
+        return $this->panels()->where('panels.id', $panelId)->exists();
+    }
+
+    /**
+     * Get pivot data (allowed nodes/services) for a specific panel
+     */
+    public function panelAccess(int $panelId): ?\Illuminate\Database\Eloquent\Relations\Pivot
+    {
+        return $this->panels()->where('panels.id', $panelId)->first()?->pivot;
+    }
+
     public function isActive(): bool
     {
         return $this->status === 'active';
