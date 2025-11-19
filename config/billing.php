@@ -27,6 +27,25 @@ return [
          * their account will be suspended and all configs disabled
          */
         'suspension_threshold' => env('WALLET_SUSPENSION_THRESHOLD', -1000),
+
+        /*
+         * Enable/disable hourly wallet charging
+         * When false, the scheduled hourly charge command will not execute
+         */
+        'hourly_charge_enabled' => env('WALLET_HOURLY_CHARGE_ENABLED', true),
+
+        /*
+         * Idempotency window in minutes
+         * Prevents charging the same reseller multiple times within this window
+         * unless --force flag is used. Default: 55 minutes (safe margin under 1 hour)
+         */
+        'charge_idempotency_minutes' => env('WALLET_CHARGE_IDEMPOTENCY_MINUTES', 55),
+
+        /*
+         * Cache lock key prefix for wallet charging
+         * Used to prevent concurrent charge operations on the same reseller
+         */
+        'charge_lock_key_prefix' => env('WALLET_CHARGE_LOCK_KEY_PREFIX', 'wallet_charge'),
     ],
 
     /*

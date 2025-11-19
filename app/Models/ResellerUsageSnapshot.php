@@ -16,11 +16,13 @@ class ResellerUsageSnapshot extends Model
         'reseller_id',
         'total_bytes',
         'measured_at',
+        'meta',
     ];
 
     protected $casts = [
         'total_bytes' => 'integer',
         'measured_at' => 'datetime',
+        'meta' => 'array',
     ];
 
     public function reseller(): BelongsTo
