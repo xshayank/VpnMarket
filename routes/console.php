@@ -29,45 +29,22 @@ Schedule::call(function () {
     }
 })->hourly();
 
-// DISABLED: Old single-panel jobs - replaced by multi-panel commands below
-// Schedule::call(function () {
-//     Log::info('Scheduler tick: Running SyncResellerUsageJob');
-//     SyncResellerUsageJob::dispatchSync();
-//     Log::info('Scheduler tick: SyncResellerUsageJob completed');
-// })->everyMinute();
+// Schedule reseller usage sync job
+// Runs every minute and executes synchronously (no queue worker needed)
+// This ensures reliable execution and immediate updates to reseller aggregates
+Schedule::call(function () {
+    Log::info('Scheduler tick: Running SyncResellerUsageJob');
+    SyncResellerUsageJob::dispatchSync();
+    Log::info('Scheduler tick: SyncResellerUsageJob completed');
+})->everyMinute();
 
-// DISABLED: Old re-enable job - replaced by multi-panel command below
-// Schedule::call(function () {
-//     Log::info('Scheduler tick: ReenableResellerConfigsJob - dispatching to queue');
-//     ReenableResellerConfigsJob::dispatch();
-//     Log::info('Scheduler tick: ReenableResellerConfigsJob dispatched successfully (will run async on queue)');
-// })->everyMinute();
-
-// Schedule multi-panel reseller usage recalculation
-// Runs every minute to aggregate usage across all assigned panels
-// Processes all traffic-based and wallet-based resellers
-Schedule::command('resellers:recalc-usage --all --chunk=200')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->onOneServer()
-    ->runInBackground();
-
-// Schedule multi-panel reseller config re-enable
+// Schedule reseller config re-enable job
 // Runs every minute to quickly re-enable configs when reseller recovers
-// Processes configs across all panels with remote-first gating
-Schedule::command('resellers:reenable-configs --all --batch=100 --reason=traffic')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->onOneServer()
-    ->runInBackground();
-
-// Schedule wallet-based reseller config re-enable
-// Runs every minute to quickly re-enable configs after wallet recharge
-Schedule::command('resellers:reenable-configs --all --batch=100 --reason=wallet')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->onOneServer()
-    ->runInBackground();
+Schedule::call(function () {
+    Log::info('Scheduler tick: ReenableResellerConfigsJob - dispatching to queue');
+    ReenableResellerConfigsJob::dispatch();
+    Log::info('Scheduler tick: ReenableResellerConfigsJob dispatched successfully (will run async on queue)');
+})->everyMinute();
 
 // Schedule reseller time window enforcement command
 // Runs every 5 minutes to enforce time limits on resellers
