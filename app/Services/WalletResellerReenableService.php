@@ -20,19 +20,28 @@ class WalletResellerReenableService
     public function reenableWalletSuspendedConfigs(Reseller $reseller): array
     {
         // Find configs that were auto-disabled by wallet suspension
-        $configs = ResellerConfig::where('reseller_id', $reseller->id)
+        // Use a more robust approach that works across different database types
+        $allDisabledConfigs = ResellerConfig::where('reseller_id', $reseller->id)
             ->where('status', 'disabled')
-            ->where(function ($query) {
-                // Match configs where disabled_by_wallet_suspension is truthy
-                $query->whereRaw("JSON_EXTRACT(meta, '$.disabled_by_wallet_suspension') = TRUE")
-                    ->orWhereRaw("JSON_EXTRACT(meta, '$.disabled_by_wallet_suspension') = '1'")
-                    ->orWhereRaw("JSON_EXTRACT(meta, '$.disabled_by_wallet_suspension') = 1")
-                    ->orWhereRaw("JSON_EXTRACT(meta, '$.disabled_by_wallet_suspension') = 'true'");
-            })
             ->get();
 
+        // Filter in PHP to ensure compatibility across database types (SQLite, MySQL, etc.)
+        $configs = $allDisabledConfigs->filter(function ($config) {
+            $meta = $config->meta ?? [];
+            $disabledByWallet = $meta['disabled_by_wallet_suspension'] ?? null;
+            
+            // Check if disabled_by_wallet_suspension is truthy (true, 1, '1', 'true')
+            return $disabledByWallet === true
+                || $disabledByWallet === 1
+                || $disabledByWallet === '1'
+                || $disabledByWallet === 'true';
+        });
+
         if ($configs->isEmpty()) {
-            Log::info("No wallet-suspended configs to re-enable for reseller {$reseller->id}");
+            Log::info("No wallet-suspended configs to re-enable for reseller {$reseller->id}", [
+                'total_disabled' => $allDisabledConfigs->count(),
+                'wallet_suspended' => 0,
+            ]);
 
             return ['enabled' => 0, 'failed' => 0];
         }
@@ -47,6 +56,67 @@ class WalletResellerReenableService
         $configsByPanel = $configs->groupBy('panel_id');
 
         foreach ($configsByPanel as $panelId => $panelConfigs) {
+            // Handle configs without a panel_id separately
+            if (!$panelId) {
+                Log::info('Re-enabling configs without panel_id (local-only)', [
+                    'reseller_id' => $reseller->id,
+                    'config_count' => $panelConfigs->count(),
+                ]);
+
+                foreach ($panelConfigs as $config) {
+                    try {
+                        // No remote panel - just update locally
+                        $meta = $config->meta ?? [];
+                        unset($meta['disabled_by_wallet_suspension']);
+                        unset($meta['disabled_by_wallet_suspension_cycle_at']);
+                        unset($meta['disabled_by_reseller_id']);
+                        unset($meta['disabled_at']);
+
+                        $config->update([
+                            'status' => 'active',
+                            'disabled_at' => null,
+                            'meta' => $meta,
+                        ]);
+
+                        $enabledCount++;
+
+                        Log::info('reenable_success_local_only', [
+                            'config_id' => $config->id,
+                            'reseller_id' => $reseller->id,
+                        ]);
+
+                        // Log event
+                        ResellerConfigEvent::create([
+                            'reseller_config_id' => $config->id,
+                            'type' => 'auto_enabled',
+                            'meta' => [
+                                'reason' => 'wallet_recharged',
+                                'remote_success' => null,
+                            ],
+                        ]);
+
+                        // Create audit log
+                        AuditLog::log(
+                            action: 'config_auto_enabled',
+                            targetType: 'config',
+                            targetId: $config->id,
+                            reason: 'wallet_recharged',
+                            meta: [
+                                'reseller_id' => $reseller->id,
+                                'remote_success' => null,
+                                'note' => 'no_panel_configured',
+                            ],
+                            actorType: null,
+                            actorId: null
+                        );
+                    } catch (\Exception $e) {
+                        Log::error("Exception enabling config {$config->id}: ".$e->getMessage());
+                        $failedCount++;
+                    }
+                }
+                continue;
+            }
+
             $panel = Panel::find($panelId);
             
             if (!$panel) {
@@ -78,6 +148,7 @@ class WalletResellerReenableService
                         // Update local status and clear wallet suspension markers
                         $meta = $config->meta ?? [];
                         unset($meta['disabled_by_wallet_suspension']);
+                        unset($meta['disabled_by_wallet_suspension_cycle_at']);
                         unset($meta['disabled_by_reseller_id']);
                         unset($meta['disabled_at']);
 
