@@ -1,16 +1,19 @@
 <?php
 
-use App\Models\Panel;
 use App\Models\Reseller;
 use App\Models\ResellerConfig;
 use App\Models\Setting;
+use App\Models\Panel;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Support\PaymentMethodConfig;
 use App\Support\Tetra98Config;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use function Pest\Laravel\actingAs;
 use function Pest\Laravel\post;
+use function Pest\Laravel\get;
 
 beforeEach(function () {
     PaymentMethodConfig::clearCache();
@@ -31,11 +34,20 @@ function enableTetra98(): void
 
 it('credits wallet and reactivates suspended_wallet reseller when balance reaches 150000', function () {
     $user = User::factory()->create(['balance' => 0]);
+    $panel = Panel::factory()->create();
+
     $reseller = Reseller::factory()->create([
         'user_id' => $user->id,
         'type' => Reseller::TYPE_WALLET,
         'status' => 'suspended_wallet',
         'wallet_balance' => 0,
+        'primary_panel_id' => $panel->id,
+        'panel_id' => $panel->id,
+    ]);
+
+    DB::table('resellers')->whereKey($reseller->id)->update([
+        'primary_panel_id' => $panel->id,
+        'panel_id' => $panel->id,
     ]);
 
     // Create a disabled config with wallet suspension metadata
@@ -103,6 +115,70 @@ it('credits wallet and reactivates suspended_wallet reseller when balance reache
     // Assert config re-enabled and meta cleared
     expect($config->status)->toBe('active');
     expect($config->meta['disabled_by_wallet_suspension'] ?? null)->toBeNull();
+});
+
+it('allows activated wallet reseller to access reseller routes after callback', function () {
+    $user = User::factory()->create(['balance' => 0]);
+    $panel = Panel::factory()->create();
+    $reseller = Reseller::factory()->create([
+        'user_id' => $user->id,
+        'type' => Reseller::TYPE_WALLET,
+        'status' => 'suspended_wallet',
+        'wallet_balance' => 0,
+        'primary_panel_id' => $panel->id,
+        'panel_id' => $panel->id,
+    ]);
+
+    $authority = 'AUTH_WALLET_ACCESS';
+    $transaction = Transaction::create([
+        'user_id' => $user->id,
+        'order_id' => null,
+        'amount' => 200000,
+        'type' => Transaction::TYPE_DEPOSIT,
+        'status' => Transaction::STATUS_PENDING,
+        'description' => 'شارژ کیف پول (درگاه Tetra98) - در انتظار پرداخت',
+        'metadata' => [
+            'payment_method' => 'tetra98',
+            'phone' => '09123456789',
+            'email' => $user->email,
+            'deposit_mode' => 'wallet',
+            'tetra98' => [
+                'hash_id' => 'tetra98-wallet-access',
+                'authority' => $authority,
+                'amount_toman' => 200000,
+                'state' => 'redirected',
+            ],
+        ],
+    ]);
+
+    Http::fake([
+        'https://tetra98.ir/api/verify' => Http::response([
+            'status' => '100',
+            'authority' => $authority,
+        ], 200),
+    ]);
+
+    post(Tetra98Config::getCallbackPath(), [
+        'status' => 100,
+        'authority' => $authority,
+    ])->assertOk();
+
+    $reseller->refresh();
+    $transaction->refresh();
+
+    expect($reseller->status)->toBe('active');
+    expect($transaction->status)->toBe(Transaction::STATUS_COMPLETED);
+
+    DB::table('resellers')->whereKey($reseller->id)->update([
+        'primary_panel_id' => $panel->id,
+        'panel_id' => $panel->id,
+    ]);
+    $reseller->refresh();
+
+    actingAs($user);
+
+    $response = get('/reseller');
+    $response->assertOk();
 });
 
 it('credits wallet but does NOT reactivate reseller when balance is below 150000', function () {

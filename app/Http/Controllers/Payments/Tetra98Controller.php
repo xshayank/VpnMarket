@@ -12,6 +12,7 @@ use App\Support\Tetra98Config;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
@@ -521,9 +522,19 @@ class Tetra98Controller extends Controller
                         'reactivation_threshold' => $reactivationThreshold,
                     ]);
 
-                    // Update reseller status to active
+                    // Update reseller status to active and clear any cached state
                     $reseller->status = 'active';
                     $reseller->save();
+                    $reseller->refresh();
+
+                    Cache::forget("reseller_status:{$reseller->id}");
+
+                    Log::info('wallet_topup_completed_reseller_activated', [
+                        'action' => 'wallet_topup_completed_reseller_activated',
+                        'reseller_id' => $reseller->id,
+                        'user_id' => $user?->id,
+                        'wallet_balance' => $reseller->wallet_balance,
+                    ]);
 
                     Log::info('tetra98_wallet_reseller_reactivated', [
                         'action' => 'tetra98_wallet_reseller_reactivated',
@@ -553,6 +564,15 @@ class Tetra98Controller extends Controller
                             'error' => $e->getMessage(),
                         ]);
                     }
+
+                    dispatch(new ReenableResellerConfigsJob($reseller, 'wallet'));
+
+                    Log::info('wallet_reenable_job_dispatched', [
+                        'action' => 'wallet_reenable_job_dispatched',
+                        'reseller_id' => $reseller->id,
+                        'user_id' => $user?->id,
+                        'suspension_reason' => 'wallet',
+                    ]);
                 } else {
                     // Log why reactivation was not triggered
                     if ($reseller->isSuspendedWallet()) {

@@ -25,14 +25,18 @@ class EnsureWalletAccess
             return redirect()->route('login');
         }
 
-        $user = auth()->user();
+        $user = $request->user();
 
         // Only check for resellers
         if (! $user->isReseller()) {
             return $next($request);
         }
 
-        $reseller = $user->reseller;
+        if ($user->relationLoaded('reseller')) {
+            $user->unsetRelation('reseller');
+        }
+
+        $reseller = $user->reseller()->first()?->refresh();
 
         if (! $reseller) {
             Log::warning('reseller_panel_redirect', [

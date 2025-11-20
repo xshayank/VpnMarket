@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\WalletTopUpTransactionResource\Pages;
+use App\Jobs\ReenableResellerConfigsJob;
 use App\Models\Reseller;
 use App\Models\Setting;
 use App\Models\Transaction;
@@ -14,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Telegram\Bot\Laravel\Facades\Telegram;
@@ -220,10 +222,29 @@ class WalletTopUpTransactionResource extends Resource
                                     $reseller->isSuspendedWallet() &&
                                     $reseller->wallet_balance > config('billing.wallet.suspension_threshold', -1000)) {
                                     $reseller->update(['status' => 'active']);
+                                    $reseller->refresh();
+
+                                    Cache::forget("reseller_status:{$reseller->id}");
+
+                                    Log::info('wallet_topup_completed_reseller_activated', [
+                                        'action' => 'wallet_topup_completed_reseller_activated',
+                                        'reseller_id' => $reseller->id,
+                                        'user_id' => $user->id,
+                                        'wallet_balance' => $reseller->wallet_balance,
+                                    ]);
 
                                     // Re-enable configs that were auto-disabled due to wallet suspension
                                     $reenableService = new WalletResellerReenableService();
                                     $reenableStats = $reenableService->reenableWalletSuspendedConfigs($reseller);
+
+                                    dispatch(new ReenableResellerConfigsJob($reseller, 'wallet'));
+
+                                    Log::info('wallet_reenable_job_dispatched', [
+                                        'action' => 'wallet_reenable_job_dispatched',
+                                        'reseller_id' => $reseller->id,
+                                        'user_id' => $user->id,
+                                        'suspension_reason' => 'wallet',
+                                    ]);
 
                                     Notification::make()
                                         ->title('ریسلر به طور خودکار فعال شد.')
