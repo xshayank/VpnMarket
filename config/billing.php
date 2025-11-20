@@ -29,10 +29,16 @@ return [
         'suspension_threshold' => env('WALLET_SUSPENSION_THRESHOLD', -1000),
 
         /*
-         * Enable/disable hourly wallet charging
-         * When false, the scheduled hourly charge command will not execute
+         * Enable/disable wallet charging scheduler
+         * When false, the scheduled charge command will not execute
          */
-        'hourly_charge_enabled' => env('WALLET_HOURLY_CHARGE_ENABLED', true),
+        'charge_enabled' => env('WALLET_CHARGE_ENABLED', true),
+
+        /*
+         * How often (in minutes) to run the wallet charging scheduler
+         * Defaults to once per minute
+         */
+        'charge_frequency_minutes' => env('WALLET_CHARGE_FREQUENCY_MINUTES', 1),
 
         /*
          * Enable/disable automatic re-enable of wallet-suspended configs
@@ -41,11 +47,23 @@ return [
         'auto_reenable_enabled' => env('WALLET_AUTO_REENABLE_ENABLED', true),
 
         /*
-         * Idempotency window in minutes
+         * Idempotency window in seconds
          * Prevents charging the same reseller multiple times within this window
-         * unless --force flag is used. Default: 55 minutes (safe margin under 1 hour)
+         * unless --force flag is used. Default: 50 seconds (safe margin under 1 minute)
          */
-        'charge_idempotency_minutes' => env('WALLET_CHARGE_IDEMPOTENCY_MINUTES', 55),
+        'charge_idempotency_seconds' => env('WALLET_CHARGE_IDEMPOTENCY_SECONDS', 50),
+
+        /*
+         * Minimum delta (in bytes) before applying a charge
+         * Prevents charging on tiny fractional usage to avoid billing inflation
+         */
+        'minimum_delta_bytes_to_charge' => env('WALLET_MINIMUM_DELTA_BYTES_TO_CHARGE', 5 * 1024 * 1024),
+
+        /*
+         * Lock TTL (in seconds) for the charge operation
+         * Prevents concurrent executions per reseller when running every minute
+         */
+        'charge_lock_ttl_seconds' => env('WALLET_CHARGE_LOCK_TTL_SECONDS', 20),
 
         /*
          * Cache lock key prefix for wallet charging
