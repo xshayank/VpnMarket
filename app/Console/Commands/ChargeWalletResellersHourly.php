@@ -8,7 +8,6 @@ use App\Models\Reseller;
 use App\Models\ResellerConfigEvent;
 use App\Models\ResellerUsageSnapshot;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class ChargeWalletResellersHourly extends Command
@@ -58,7 +57,6 @@ class ChargeWalletResellersHourly extends Command
         $charged = 0;
         $skipped = 0;
         $suspended = 0;
-        $lockFailed = 0;
         $totalCost = 0;
 
         foreach ($walletResellers as $reseller) {
@@ -70,8 +68,6 @@ class ChargeWalletResellersHourly extends Command
                     $totalCost += $result['cost'];
                 } elseif ($result['status'] === 'skipped') {
                     $skipped++;
-                } elseif ($result['status'] === 'lock_failed') {
-                    $lockFailed++;
                 }
 
                 if ($result['suspended']) {
@@ -88,14 +84,13 @@ class ChargeWalletResellersHourly extends Command
             }
         }
 
-        $summary = "Wallet charging completed: {$charged} charged, {$skipped} skipped (recent snapshot/threshold), {$lockFailed} lock failed, {$suspended} suspended, total cost: {$totalCost} تومان";
+        $summary = "Wallet charging completed: {$charged} charged, {$skipped} skipped (recent snapshot/threshold), {$suspended} suspended, total cost: {$totalCost} تومان";
         $this->info($summary);
 
         Log::info('wallet_charge_cycle_complete', [
             'cycle_started_at' => $cycleStartedAt,
             'charged' => $charged,
             'skipped' => $skipped,
-            'lock_failed' => $lockFailed,
             'suspended' => $suspended,
             'total_cost' => $totalCost,
         ]);
@@ -142,38 +137,7 @@ class ChargeWalletResellersHourly extends Command
             }
         }
 
-        // Try to acquire lock (skip if dry run)
-        if (!$dryRun) {
-            $lockKey = config('billing.wallet.charge_lock_key_prefix', 'wallet_charge') . ":reseller:{$reseller->id}";
-            $lockTtl = config('billing.wallet.charge_lock_ttl_seconds', 20);
-            $lock = Cache::lock($lockKey, $lockTtl);
-
-            if (!$lock->get()) {
-                Log::warning('wallet_charge_lock_failed', [
-                    'reseller_id' => $reseller->id,
-                    'cycle_started_at' => $cycleStartedAt,
-                    'lock_key' => $lockKey,
-                ]);
-
-                return [
-                    'status' => 'lock_failed',
-                    'reason' => 'concurrent_execution',
-                    'charged' => false,
-                    'cost' => 0,
-                    'suspended' => false,
-                ];
-            }
-
-            try {
-                $result = $this->chargeReseller($reseller, $cycleStartedAt, $dryRun);
-                return $result;
-            } finally {
-                $lock->release();
-            }
-        } else {
-            // Dry run - no locking needed
-            return $this->chargeReseller($reseller, $cycleStartedAt, $dryRun);
-        }
+        return $this->chargeReseller($reseller, $cycleStartedAt, $dryRun);
     }
 
     /**

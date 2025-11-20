@@ -5,7 +5,6 @@ use App\Models\ResellerConfig;
 use App\Models\ResellerUsageSnapshot;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 
 test('idempotency: consecutive runs do not double-charge', function () {
@@ -165,38 +164,6 @@ test('idempotency: only charges wallet-based resellers', function () {
     // Traffic reseller should not be charged
     expect($trafficReseller->wallet_balance)->toBe(0);
     expect($trafficReseller->usageSnapshots()->count())->toBe(0);
-});
-
-test('locking: concurrent execution protection', function () {
-    Config::set('billing.wallet.price_per_gb', 1000);
-
-    $user = User::factory()->create();
-    $reseller = Reseller::factory()->create([
-        'user_id' => $user->id,
-        'type' => 'wallet',
-        'wallet_balance' => 10000,
-    ]);
-
-    ResellerConfig::factory()->create([
-        'reseller_id' => $reseller->id,
-        'usage_bytes' => 1 * 1024 * 1024 * 1024,
-    ]);
-
-    // Acquire lock manually to simulate another process
-    $lockKey = config('billing.wallet.charge_lock_key_prefix', 'wallet_charge') . ":reseller:{$reseller->id}";
-    $lock = Cache::lock($lockKey, 20);
-    $lock->get();
-
-    try {
-        // Try to charge - should fail to acquire lock
-        Artisan::call('reseller:charge-wallet-hourly');
-        $reseller->refresh();
-
-        // Balance should not change due to lock
-        expect($reseller->wallet_balance)->toBe(10000);
-    } finally {
-        $lock->release();
-    }
 });
 
 test('minimum delta: skips charges below configured threshold without snapshots', function () {
