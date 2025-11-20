@@ -84,7 +84,7 @@ class ChargeWalletResellersHourly extends Command
             }
         }
 
-        $summary = "Wallet charging completed: {$charged} charged, {$skipped} skipped (recent snapshot/threshold), {$suspended} suspended, total cost: {$totalCost} تومان";
+        $summary = "Wallet charging completed: {$charged} charged, {$skipped} skipped, {$suspended} suspended, total cost: {$totalCost} تومان";
         $this->info($summary);
 
         Log::info('wallet_charge_cycle_complete', [
@@ -99,44 +99,11 @@ class ChargeWalletResellersHourly extends Command
     }
 
     /**
-     * Charge a single reseller with safeguards (idempotency, locking)
+     * Charge a single reseller with safeguards
      * Public method to allow single-reseller command to reuse logic
      */
     public function chargeResellerWithSafeguards(Reseller $reseller, string $cycleStartedAt, bool $force = false, bool $dryRun = false): array
     {
-        // Check idempotency window
-        if (!$force && !$dryRun) {
-            // Only consider snapshots where a charge was actually applied
-            $lastSnapshot = $reseller->usageSnapshots()
-                ->whereRaw("JSON_EXTRACT(meta, '$.cycle_charge_applied') = TRUE")
-                ->orderBy('measured_at', 'desc')
-                ->first();
-
-            if ($lastSnapshot) {
-                $secondsSinceLastSnapshot = now()->diffInSeconds($lastSnapshot->measured_at);
-                $idempotencyWindow = config('billing.wallet.charge_idempotency_seconds', 50);
-
-                if ($secondsSinceLastSnapshot < $idempotencyWindow) {
-                    Log::info('wallet_charge_idempotent_skip', [
-                        'reseller_id' => $reseller->id,
-                        'cycle_started_at' => $cycleStartedAt,
-                        'seconds_since_last_applied' => $secondsSinceLastSnapshot,
-                        'idempotency_window' => $idempotencyWindow,
-                        'last_snapshot_at' => $lastSnapshot->measured_at->toIso8601String(),
-                        'last_snapshot_had_charge' => true,
-                    ]);
-
-                    return [
-                        'status' => 'skipped',
-                        'reason' => 'recent_snapshot',
-                        'charged' => false,
-                        'cost' => 0,
-                        'suspended' => false,
-                    ];
-                }
-            }
-        }
-
         return $this->chargeReseller($reseller, $cycleStartedAt, $dryRun);
     }
 

@@ -47,13 +47,6 @@ return [
         'auto_reenable_enabled' => env('WALLET_AUTO_REENABLE_ENABLED', true),
 
         /*
-         * Idempotency window in seconds
-         * Prevents charging the same reseller multiple times within this window
-         * unless --force flag is used. Default: 50 seconds (safe margin under 1 minute)
-         */
-        'charge_idempotency_seconds' => env('WALLET_CHARGE_IDEMPOTENCY_SECONDS', 50),
-
-        /*
          * Minimum delta (in bytes) before applying a charge
          * Prevents charging on tiny fractional usage to avoid billing inflation
          */
