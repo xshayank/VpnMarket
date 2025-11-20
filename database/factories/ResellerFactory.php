@@ -55,9 +55,6 @@ class ResellerFactory extends Factory
     public function walletBased(): static
     {
         return $this->state(function (array $attributes) {
-            // At this point, $attributes contains only the base definition
-            // We won't know the final wallet_balance yet
-            // So we return a default that will be computed after merge
             $defaultBalance = 10000;
             $firstTopupMin = config('billing.reseller.first_topup.wallet_min', 150000);
             
@@ -65,17 +62,12 @@ class ResellerFactory extends Factory
                 'type' => 'wallet',
                 'wallet_balance' => $defaultBalance,
                 'wallet_price_per_gb' => null,
-                // Default to suspended_wallet for safety
                 'status' => $defaultBalance >= $firstTopupMin ? 'active' : 'suspended_wallet',
             ];
         })->afterMaking(function (Reseller $reseller) {
-            // After making (with all attributes merged), check the actual balance
+            // Recalculate status based on actual wallet_balance after all attributes are merged
             $firstTopupMin = config('billing.reseller.first_topup.wallet_min', 150000);
-            
-            // Only set status if it wasn't explicitly set to something else
-            if ($reseller->status === 'active' || $reseller->status === 'suspended_wallet') {
-                $reseller->status = $reseller->wallet_balance >= $firstTopupMin ? 'active' : 'suspended_wallet';
-            }
+            $reseller->status = $reseller->wallet_balance >= $firstTopupMin ? 'active' : 'suspended_wallet';
         });
     }
 
