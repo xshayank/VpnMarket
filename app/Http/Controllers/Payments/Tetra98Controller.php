@@ -556,6 +556,16 @@ class Tetra98Controller extends Controller
                 } else {
                     // Log why reactivation was not triggered
                     if ($reseller->isSuspendedWallet()) {
+                        Log::warning('wallet_activation_condition_failed', [
+                            'action' => 'tetra98_reactivation_threshold_not_met',
+                            'reseller_id' => $reseller->id,
+                            'user_id' => $user?->id,
+                            'wallet_balance' => $reseller->wallet_balance,
+                            'reactivation_threshold' => $reactivationThreshold,
+                            'shortfall' => $reactivationThreshold - $reseller->wallet_balance,
+                            'reason' => 'balance_below_first_topup_minimum',
+                        ]);
+                    } else {
                         Log::info('tetra98_reactivation_threshold_not_met', [
                             'action' => 'tetra98_reactivation_threshold_not_met',
                             'reseller_id' => $reseller->id,
@@ -563,6 +573,7 @@ class Tetra98Controller extends Controller
                             'wallet_balance' => $reseller->wallet_balance,
                             'reactivation_threshold' => $reactivationThreshold,
                             'shortfall' => $reactivationThreshold - $reseller->wallet_balance,
+                            'reseller_status' => $reseller->status,
                         ]);
                     }
                 }

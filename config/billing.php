@@ -35,6 +35,12 @@ return [
         'hourly_charge_enabled' => env('WALLET_HOURLY_CHARGE_ENABLED', true),
 
         /*
+         * Enable/disable automatic re-enable of wallet-suspended configs
+         * When false, configs will not be automatically re-enabled even if balance recovers
+         */
+        'auto_reenable_enabled' => env('WALLET_AUTO_REENABLE_ENABLED', true),
+
+        /*
          * Idempotency window in minutes
          * Prevents charging the same reseller multiple times within this window
          * unless --force flag is used. Default: 55 minutes (safe margin under 1 hour)

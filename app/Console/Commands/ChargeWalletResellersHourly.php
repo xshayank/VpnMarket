@@ -111,7 +111,9 @@ class ChargeWalletResellersHourly extends Command
     {
         // Check idempotency window
         if (!$force && !$dryRun) {
+            // Only consider snapshots where a charge was actually applied
             $lastSnapshot = $reseller->usageSnapshots()
+                ->whereRaw("JSON_EXTRACT(meta, '$.cycle_charge_applied') = TRUE")
                 ->orderBy('measured_at', 'desc')
                 ->first();
 
@@ -120,12 +122,13 @@ class ChargeWalletResellersHourly extends Command
                 $idempotencyWindow = config('billing.wallet.charge_idempotency_minutes', 55);
 
                 if ($minutesSinceLastSnapshot < $idempotencyWindow) {
-                    Log::info('wallet_charge_skipped_recent_snapshot', [
+                    Log::info('wallet_charge_idempotent_skip', [
                         'reseller_id' => $reseller->id,
                         'cycle_hour' => $cycleHour,
-                        'minutes_since_last' => $minutesSinceLastSnapshot,
+                        'minutes_since_last_applied' => $minutesSinceLastSnapshot,
                         'idempotency_window' => $idempotencyWindow,
                         'last_snapshot_at' => $lastSnapshot->measured_at->toIso8601String(),
+                        'last_snapshot_had_charge' => true,
                     ]);
 
                     return [
