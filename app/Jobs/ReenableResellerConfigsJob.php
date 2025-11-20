@@ -48,7 +48,8 @@ class ReenableResellerConfigsJob implements ShouldQueue
 
         // Guard clause for wallet suspensions: ensure reseller is active and balance is above threshold
         if ($this->suspensionReason === 'wallet') {
-            $suspensionThreshold = config('billing.wallet.suspension_threshold', -1000);
+            // Use first_topup threshold for consistency with activation logic
+            $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
             
             if ($this->reseller->status !== 'active') {
                 Log::info('wallet_reenable_skipped', [
@@ -56,18 +57,18 @@ class ReenableResellerConfigsJob implements ShouldQueue
                     'reason' => 'reseller_not_active',
                     'status' => $this->reseller->status,
                     'balance' => $this->reseller->wallet_balance,
-                    'threshold' => $suspensionThreshold,
+                    'threshold' => $reactivationThreshold,
                 ]);
                 return;
             }
 
-            if ($this->reseller->wallet_balance <= $suspensionThreshold) {
+            if ($this->reseller->wallet_balance < $reactivationThreshold) {
                 Log::info('wallet_reenable_skipped', [
                     'reseller_id' => $this->reseller->id,
                     'reason' => 'balance_below_threshold',
                     'status' => $this->reseller->status,
                     'balance' => $this->reseller->wallet_balance,
-                    'threshold' => $suspensionThreshold,
+                    'threshold' => $reactivationThreshold,
                 ]);
                 return;
             }

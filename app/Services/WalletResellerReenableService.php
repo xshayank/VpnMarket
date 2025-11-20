@@ -19,6 +19,21 @@ class WalletResellerReenableService
      */
     public function reenableWalletSuspendedConfigs(Reseller $reseller): array
     {
+        // Idempotency guard: only proceed if reseller is active and has sufficient balance
+        $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
+        if ($reseller->status !== 'active' || $reseller->wallet_balance < $reactivationThreshold) {
+            Log::info('wallet_reenable_skipped_idempotent', [
+                'action' => 'wallet_reenable_skipped_idempotent',
+                'reseller_id' => $reseller->id,
+                'status' => $reseller->status,
+                'wallet_balance' => $reseller->wallet_balance,
+                'threshold' => $reactivationThreshold,
+                'reason' => $reseller->status !== 'active' ? 'reseller_not_active' : 'balance_below_threshold',
+            ]);
+            
+            return ['enabled' => 0, 'failed' => 0];
+        }
+
         // Find configs that were auto-disabled by wallet suspension
         // Use a more robust approach that works across different database types
         $allDisabledConfigs = ResellerConfig::where('reseller_id', $reseller->id)
