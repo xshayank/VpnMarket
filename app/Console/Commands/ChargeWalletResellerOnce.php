@@ -72,12 +72,12 @@ class ChargeWalletResellerOnce extends Command
         }
         $this->info('');
 
-        $cycleHour = now()->startOfHour()->toIso8601String();
+        $cycleStartedAt = now()->startOfMinute()->toIso8601String();
 
         try {
             // Use the shared logic from ChargeWalletResellersHourly
             $hourlyCommand = new ChargeWalletResellersHourly();
-            $result = $hourlyCommand->chargeResellerWithSafeguards($reseller, $cycleHour, $force, $dryRun);
+            $result = $hourlyCommand->chargeResellerWithSafeguards($reseller, $cycleStartedAt, $force, $dryRun);
 
             // Display results in a table
             $this->displayResults($reseller, $result, $dryRun);
@@ -146,8 +146,18 @@ class ChargeWalletResellerOnce extends Command
         // Display status
         $this->info('');
         if ($result['status'] === 'skipped') {
-            $this->warn('⚠ SKIPPED: Recent snapshot exists within idempotency window');
-            $this->info("  Use --force to bypass idempotency check");
+            $reason = $result['reason'] ?? 'unknown';
+
+            if ($reason === 'recent_snapshot') {
+                $this->warn('⚠ SKIPPED: Recent snapshot exists within idempotency window');
+                $this->info('  Use --force to bypass idempotency check');
+            } elseif ($reason === 'no_usage_delta') {
+                $this->warn('⚠ SKIPPED: No new usage detected since last charge');
+            } elseif ($reason === 'below_minimum_delta') {
+                $this->warn('⚠ SKIPPED: Usage delta below minimum charge threshold');
+            } else {
+                $this->warn('⚠ SKIPPED: Charge was skipped');
+            }
         } elseif ($result['status'] === 'lock_failed') {
             $this->warn('⚠ LOCK FAILED: Another process is currently charging this reseller');
         } elseif ($result['status'] === 'dry_run') {

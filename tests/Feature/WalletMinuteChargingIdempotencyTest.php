@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Config;
 
 test('idempotency: consecutive runs do not double-charge', function () {
     Config::set('billing.wallet.price_per_gb', 1000);
-    Config::set('billing.wallet.charge_idempotency_minutes', 55);
+    Config::set('billing.wallet.charge_idempotency_seconds', 50);
 
     $user = User::factory()->create();
     $reseller = Reseller::factory()->create([
@@ -47,7 +47,7 @@ test('idempotency: consecutive runs do not double-charge', function () {
 
 test('idempotency: forced charge bypasses idempotency window', function () {
     Config::set('billing.wallet.price_per_gb', 1000);
-    Config::set('billing.wallet.charge_idempotency_minutes', 55);
+    Config::set('billing.wallet.charge_idempotency_seconds', 50);
 
     $user = User::factory()->create();
     $reseller = Reseller::factory()->create([
@@ -119,7 +119,7 @@ test('idempotency: snapshot stores cycle metadata', function () {
 });
 
 test('idempotency: feature flag disables charging', function () {
-    Config::set('billing.wallet.hourly_charge_enabled', false);
+    Config::set('billing.wallet.charge_enabled', false);
     Config::set('billing.wallet.price_per_gb', 1000);
 
     $user = User::factory()->create();
@@ -184,7 +184,7 @@ test('locking: concurrent execution protection', function () {
 
     // Acquire lock manually to simulate another process
     $lockKey = config('billing.wallet.charge_lock_key_prefix', 'wallet_charge') . ":reseller:{$reseller->id}";
-    $lock = Cache::lock($lockKey, 60);
+    $lock = Cache::lock($lockKey, 20);
     $lock->get();
 
     try {
@@ -197,6 +197,30 @@ test('locking: concurrent execution protection', function () {
     } finally {
         $lock->release();
     }
+});
+
+test('minimum delta: skips charges below configured threshold without snapshots', function () {
+    Config::set('billing.wallet.price_per_gb', 1000);
+    Config::set('billing.wallet.minimum_delta_bytes_to_charge', 5 * 1024 * 1024); // 5 MB
+
+    $user = User::factory()->create();
+    $reseller = Reseller::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'wallet',
+        'wallet_balance' => 10000,
+    ]);
+
+    // Usage below the minimum threshold (1 MB)
+    ResellerConfig::factory()->create([
+        'reseller_id' => $reseller->id,
+        'usage_bytes' => 1 * 1024 * 1024,
+    ]);
+
+    Artisan::call('reseller:charge-wallet-hourly');
+    $reseller->refresh();
+
+    expect($reseller->wallet_balance)->toBe(10000);
+    expect($reseller->usageSnapshots()->count())->toBe(0);
 });
 
 test('suspension: configs disabled once per cycle', function () {
