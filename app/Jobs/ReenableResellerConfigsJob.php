@@ -14,6 +14,7 @@ class ReenableResellerConfigsJob implements ShouldQueue
     use Queueable;
 
     public Reseller $reseller;
+
     public string $suspensionReason;
 
     /**
@@ -37,44 +38,48 @@ class ReenableResellerConfigsJob implements ShouldQueue
         ]);
 
         // Check if auto re-enable is enabled
-        if (!config('billing.wallet.auto_reenable_enabled', true)) {
+        if (! config('billing.wallet.auto_reenable_enabled', true)) {
             Log::info('wallet_reenable_skipped', [
                 'reseller_id' => $this->reseller->id,
                 'reason' => 'auto_reenable_disabled',
                 'suspension_reason' => $this->suspensionReason,
             ]);
+
             return;
         }
 
         // Guard clause for wallet suspensions: ensure reseller is active and balance is above threshold
         if ($this->suspensionReason === 'wallet') {
-            $suspensionThreshold = config('billing.wallet.suspension_threshold', -1000);
-            
+            // Use first_topup threshold for consistency with activation logic
+            $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
+
             if ($this->reseller->status !== 'active') {
                 Log::info('wallet_reenable_skipped', [
                     'reseller_id' => $this->reseller->id,
                     'reason' => 'reseller_not_active',
                     'status' => $this->reseller->status,
                     'balance' => $this->reseller->wallet_balance,
-                    'threshold' => $suspensionThreshold,
+                    'threshold' => $reactivationThreshold,
                 ]);
+
                 return;
             }
 
-            if ($this->reseller->wallet_balance <= $suspensionThreshold) {
+            if ($this->reseller->wallet_balance < $reactivationThreshold) {
                 Log::info('wallet_reenable_skipped', [
                     'reseller_id' => $this->reseller->id,
                     'reason' => 'balance_below_threshold',
                     'status' => $this->reseller->status,
                     'balance' => $this->reseller->wallet_balance,
-                    'threshold' => $suspensionThreshold,
+                    'threshold' => $reactivationThreshold,
                 ]);
+
                 return;
             }
         }
 
-        $metaKey = $this->suspensionReason === 'wallet' 
-            ? 'disabled_by_wallet_suspension' 
+        $metaKey = $this->suspensionReason === 'wallet'
+            ? 'disabled_by_wallet_suspension'
             : 'disabled_by_traffic_suspension';
 
         // Get all configs that were disabled due to this suspension
@@ -83,6 +88,7 @@ class ReenableResellerConfigsJob implements ShouldQueue
             ->get()
             ->filter(function ($config) use ($metaKey) {
                 $meta = $config->meta ?? [];
+
                 return isset($meta[$metaKey]) && $meta[$metaKey] === true;
             });
 
@@ -91,6 +97,7 @@ class ReenableResellerConfigsJob implements ShouldQueue
                 'reseller_id' => $this->reseller->id,
                 'suspension_reason' => $this->suspensionReason,
             ]);
+
             return;
         }
 
@@ -108,13 +115,14 @@ class ReenableResellerConfigsJob implements ShouldQueue
 
         foreach ($configsByPanel as $panelId => $panelConfigs) {
             $panel = Panel::find($panelId);
-            
-            if (!$panel) {
+
+            if (! $panel) {
                 Log::warning('Panel not found for configs', [
                     'panel_id' => $panelId,
                     'config_count' => $panelConfigs->count(),
                 ]);
                 $failCount += $panelConfigs->count();
+
                 continue;
             }
 
@@ -135,12 +143,12 @@ class ReenableResellerConfigsJob implements ShouldQueue
                     if ($remoteEnabled) {
                         // Update local config status
                         $config->status = 'active';
-                        
+
                         // Clear suspension metadata
                         $meta = $config->meta ?? [];
                         unset($meta[$metaKey]);
                         $config->meta = $meta;
-                        
+
                         $config->save();
 
                         Log::info('config_reenable_success', [
@@ -183,8 +191,6 @@ class ReenableResellerConfigsJob implements ShouldQueue
     /**
      * Enable a config on its remote panel
      *
-     * @param ResellerConfig $config
-     * @param Panel $panel
      * @return bool True if enabled successfully
      */
     protected function enableConfigOnPanel(ResellerConfig $config, Panel $panel): bool
@@ -194,7 +200,7 @@ class ReenableResellerConfigsJob implements ShouldQueue
 
         try {
             // Use ResellerProvisioner's enableUser method
-            $provisioner = new \Modules\Reseller\Services\ResellerProvisioner();
+            $provisioner = new \Modules\Reseller\Services\ResellerProvisioner;
             $result = $provisioner->enableUser(
                 $panel->panel_type,
                 $credentials,
@@ -209,6 +215,7 @@ class ReenableResellerConfigsJob implements ShouldQueue
                 'panel_type' => $panelType,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }

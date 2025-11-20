@@ -218,9 +218,11 @@ class WalletTopUpTransactionResource extends Resource
                                 ]);
 
                                 // Check if reseller was suspended and should be reactivated
+                                // Use first_topup threshold for suspended_wallet resellers
+                                $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
                                 if (method_exists($reseller, 'isSuspendedWallet') &&
                                     $reseller->isSuspendedWallet() &&
-                                    $reseller->wallet_balance > config('billing.wallet.suspension_threshold', -1000)) {
+                                    $reseller->wallet_balance >= $reactivationThreshold) {
                                     $reseller->update(['status' => 'active']);
                                     $reseller->refresh();
 
@@ -231,10 +233,11 @@ class WalletTopUpTransactionResource extends Resource
                                         'reseller_id' => $reseller->id,
                                         'user_id' => $user->id,
                                         'wallet_balance' => $reseller->wallet_balance,
+                                        'reactivation_threshold' => $reactivationThreshold,
                                     ]);
 
                                     // Re-enable configs that were auto-disabled due to wallet suspension
-                                    $reenableService = new WalletResellerReenableService();
+                                    $reenableService = new WalletResellerReenableService;
                                     $reenableStats = $reenableService->reenableWalletSuspendedConfigs($reseller);
 
                                     dispatch(new ReenableResellerConfigsJob($reseller, 'wallet'));

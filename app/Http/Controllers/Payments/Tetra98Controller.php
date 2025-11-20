@@ -25,8 +25,7 @@ class Tetra98Controller extends Controller
     public function __construct(
         private readonly Tetra98Client $client,
         private readonly WalletResellerReenableService $walletResellerReenableService
-    ) {
-    }
+    ) {}
 
     public function initiate(Request $request)
     {
@@ -410,8 +409,8 @@ class Tetra98Controller extends Controller
             $trafficGb = (int) ($metadata['traffic_gb'] ?? 0);
             $computedAmount = (int) ($metadata['computed_amount_toman'] ?? $fresh->amount);
 
-            Log::info('tetra98_verify_success', [
-                'action' => 'tetra98_verify_success',
+            Log::info('tetra98_callback_verified', [
+                'action' => 'tetra98_callback_verified',
                 'transaction_id' => $fresh->id,
                 'user_id' => $fresh->user_id,
                 'authority' => $authority,

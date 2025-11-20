@@ -19,6 +19,21 @@ class WalletResellerReenableService
      */
     public function reenableWalletSuspendedConfigs(Reseller $reseller): array
     {
+        // Idempotency guard: only proceed if reseller is active and has sufficient balance
+        $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
+        if ($reseller->status !== 'active' || $reseller->wallet_balance < $reactivationThreshold) {
+            Log::info('wallet_reenable_skipped_idempotent', [
+                'action' => 'wallet_reenable_skipped_idempotent',
+                'reseller_id' => $reseller->id,
+                'status' => $reseller->status,
+                'wallet_balance' => $reseller->wallet_balance,
+                'threshold' => $reactivationThreshold,
+                'reason' => $reseller->status !== 'active' ? 'reseller_not_active' : 'balance_below_threshold',
+            ]);
+
+            return ['enabled' => 0, 'failed' => 0];
+        }
+
         // Find configs that were auto-disabled by wallet suspension
         // Use a more robust approach that works across different database types
         $allDisabledConfigs = ResellerConfig::where('reseller_id', $reseller->id)
@@ -29,7 +44,7 @@ class WalletResellerReenableService
         $configs = $allDisabledConfigs->filter(function ($config) {
             $meta = $config->meta ?? [];
             $disabledByWallet = $meta['disabled_by_wallet_suspension'] ?? null;
-            
+
             // Check if disabled_by_wallet_suspension is truthy (true, 1, '1', 'true')
             return $disabledByWallet === true
                 || $disabledByWallet === 1
@@ -57,7 +72,7 @@ class WalletResellerReenableService
 
         foreach ($configsByPanel as $panelId => $panelConfigs) {
             // Handle configs without a panel_id separately
-            if (!$panelId) {
+            if (! $panelId) {
                 Log::info('Re-enabling configs without panel_id (local-only)', [
                     'reseller_id' => $reseller->id,
                     'config_count' => $panelConfigs->count(),
@@ -114,17 +129,19 @@ class WalletResellerReenableService
                         $failedCount++;
                     }
                 }
+
                 continue;
             }
 
             $panel = Panel::find($panelId);
-            
-            if (!$panel) {
+
+            if (! $panel) {
                 Log::warning('Panel not found for configs', [
                     'panel_id' => $panelId,
                     'config_count' => $panelConfigs->count(),
                 ]);
                 $failedCount += $panelConfigs->count();
+
                 continue;
             }
 
@@ -227,9 +244,7 @@ class WalletResellerReenableService
     /**
      * Enable a config on its remote panel
      *
-     * @param ResellerConfig $config
-     * @param Panel $panel
-     * @param \Modules\Reseller\Services\ResellerProvisioner $provisioner
+     * @param  \Modules\Reseller\Services\ResellerProvisioner  $provisioner
      * @return array ['success' => bool, 'attempts' => int, 'last_error' => ?string]
      */
     protected function enableConfigOnPanel(ResellerConfig $config, Panel $panel, $provisioner): array
@@ -246,6 +261,7 @@ class WalletResellerReenableService
                     'panel_id' => $panel->id,
                     'panel_user_id' => $config->panel_user_id,
                 ]);
+
                 return ['success' => false, 'attempts' => 0, 'last_error' => 'Missing credentials (url or api_token)'];
             }
         } elseif (in_array($panelType, ['marzban', 'marzneshin', 'xui'])) {
@@ -256,6 +272,7 @@ class WalletResellerReenableService
                     'panel_id' => $panel->id,
                     'panel_type' => $panelType,
                 ]);
+
                 return ['success' => false, 'attempts' => 0, 'last_error' => 'Missing credentials'];
             }
         }

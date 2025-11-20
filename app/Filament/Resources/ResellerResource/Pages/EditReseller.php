@@ -171,67 +171,20 @@ class EditReseller extends EditRecord
             $data['config_limit'] = null;
         }
 
-        // For wallet resellers, validate panel change
-        if ($data['type'] === 'wallet' && isset($data['primary_panel_id']) && $data['primary_panel_id'] != $this->record->primary_panel_id) {
-            // Check if reseller has active configs
-            $activeConfigsCount = $this->record->configs()
-                ->whereIn('status', ['active', 'disabled'])
-                ->count();
-
-            if ($activeConfigsCount > 0) {
-                throw new \Filament\Notifications\Notification(
-                    \Filament\Notifications\Notification::make()
-                        ->danger()
-                        ->title('تغییر پنل غیرممکن است')
-                        ->body("این ریسلر {$activeConfigsCount} کانفیگ فعال دارد. برای تغییر پنل ابتدا باید تمام کانفیگ‌ها را حذف کنید.")
-                        ->persistent()
-                        ->send()
-                );
-            }
-            
-            // Log panel change for audit
-            \App\Models\AuditLog::log(
-                action: 'reseller_panel_changed',
-                targetType: 'reseller',
-                targetId: $this->record->id,
-                reason: 'admin_action',
-                meta: [
-                    'old_panel_id' => $this->record->primary_panel_id,
-                    'new_panel_id' => $data['primary_panel_id'],
-                ]
-            );
-        }
-
         // Validate wallet reseller requirements
         if ($data['type'] === 'wallet') {
-            if (empty($data['primary_panel_id'])) {
-                throw new \Exception('Panel selection is required for wallet-based resellers.');
+            if (isset($data['panels']) && empty($data['panels'])) {
+                throw new \Exception('At least one panel must be selected for wallet-based resellers.');
             }
 
             if (isset($data['config_limit']) && ($data['config_limit'] === null || $data['config_limit'] < 1)) {
                 throw new \Exception('Config limit must be at least 1 for wallet-based resellers.');
             }
+        }
 
-            // Validate node selections belong to the selected panel
-            if (! empty($data['eylandoo_allowed_node_ids'])) {
-                $panel = \App\Models\Panel::find($data['primary_panel_id']);
-                if ($panel && $panel->panel_type === 'eylandoo') {
-                    // Validate nodes exist in the panel
-                    $validNodeIds = [];
-                    try {
-                        $panelNodes = $panel->getCachedEylandooNodes();
-                        $validNodeIds = array_map(fn ($node) => (int) $node['id'], $panelNodes);
-                    } catch (\Exception $e) {
-                        \Illuminate\Support\Facades\Log::warning('Failed to validate Eylandoo nodes during reseller edit: '.$e->getMessage());
-                    }
-
-                    foreach ($data['eylandoo_allowed_node_ids'] as $nodeId) {
-                        if (! in_array((int) $nodeId, $validNodeIds, true)) {
-                            throw new \Exception("Selected node ID {$nodeId} does not belong to the selected panel.");
-                        }
-                    }
-                }
-            }
+        // Validate traffic reseller requirements
+        if ($data['type'] === 'traffic' && isset($data['panels']) && empty($data['panels'])) {
+            throw new \Exception('At least one panel must be selected for traffic-based resellers.');
         }
 
         return $data;

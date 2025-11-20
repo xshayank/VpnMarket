@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Models\Reseller;
 use App\Models\Panel;
+use App\Models\Reseller;
 use App\Models\Setting;
+use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,16 +44,16 @@ class RegisteredUserController extends Controller
             ]);
         } catch (\Throwable $e) {
             // Log model autoload or other critical errors
-            Log::error('Registration page failed to load: ' . $e->getMessage(), [
+            Log::error('Registration page failed to load: '.$e->getMessage(), [
                 'exception' => get_class($e),
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
-            
+
             // Return a graceful 503 error instead of raw exception
             return response()->view('errors.503', [
-                'message' => 'مشکل موقت در بارگذاری صفحه ثبت‌نام. لطفاً بعداً تلاش کنید.'
+                'message' => 'مشکل موقت در بارگذاری صفحه ثبت‌نام. لطفاً بعداً تلاش کنید.',
             ], 503);
         }
     }
@@ -89,8 +89,8 @@ class RegisteredUserController extends Controller
             ]);
 
             // Determine initial status based on reseller type
-            $initialStatus = $validated['reseller_type'] === 'wallet' 
-                ? 'suspended_wallet' 
+            $initialStatus = $validated['reseller_type'] === 'wallet'
+                ? 'suspended_wallet'
                 : 'suspended_traffic';
 
             // Prepare reseller data
