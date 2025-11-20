@@ -131,12 +131,12 @@ test('suspended wallet reseller is reactivated when balance exceeds threshold', 
         'user_id' => $user->id,
         'type' => 'wallet',
         'status' => 'suspended_wallet',
-        'wallet_balance' => -2000,
+        'wallet_balance' => 0,
     ]);
 
     $transaction = Transaction::create([
         'user_id' => $user->id,
-        'amount' => 5000,
+        'amount' => 150000, // Use first_topup minimum
         'type' => Transaction::TYPE_DEPOSIT,
         'status' => Transaction::STATUS_PENDING,
         'description' => 'شارژ کیف پول ریسلر',
@@ -147,15 +147,16 @@ test('suspended wallet reseller is reactivated when balance exceeds threshold', 
         $transaction->update(['status' => Transaction::STATUS_COMPLETED]);
         $reseller->increment('wallet_balance', $transaction->amount);
 
-        // Check if reseller should be reactivated
+        // Check if reseller should be reactivated using first_topup threshold
+        $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
         if ($reseller->isSuspendedWallet() &&
-            $reseller->wallet_balance > config('billing.wallet.suspension_threshold', -1000)) {
+            $reseller->wallet_balance >= $reactivationThreshold) {
             $reseller->update(['status' => 'active']);
         }
     });
 
     expect($reseller->fresh()->status)->toBe('active');
-    expect($reseller->fresh()->wallet_balance)->toBe(3000);
+    expect($reseller->fresh()->wallet_balance)->toBe(150000);
 });
 
 test('wallet charge submission creates pending transaction for regular user', function () {
@@ -373,7 +374,7 @@ test('wallet approval re-enables eylandoo configs only when remote succeeds', fu
         'user_id' => $user->id,
         'type' => 'wallet',
         'status' => 'suspended_wallet',
-        'wallet_balance' => -2000,
+        'wallet_balance' => 0,
     ]);
 
     $panel = \App\Models\Panel::factory()->eylandoo()->create();
@@ -390,7 +391,7 @@ test('wallet approval re-enables eylandoo configs only when remote succeeds', fu
 
     $transaction = Transaction::create([
         'user_id' => $user->id,
-        'amount' => 5000,
+        'amount' => 150000, // Use first_topup minimum
         'type' => Transaction::TYPE_DEPOSIT,
         'status' => Transaction::STATUS_PENDING,
         'description' => 'شارژ کیف پول ریسلر',
@@ -401,8 +402,10 @@ test('wallet approval re-enables eylandoo configs only when remote succeeds', fu
         $transaction->update(['status' => Transaction::STATUS_COMPLETED]);
         $reseller->increment('wallet_balance', $transaction->amount);
 
+        // Use first_topup threshold for reactivation
+        $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
         if ($reseller->isSuspendedWallet() &&
-            $reseller->wallet_balance > config('billing.wallet.suspension_threshold', -1000)) {
+            $reseller->wallet_balance >= $reactivationThreshold) {
             $reseller->update(['status' => 'active']);
             
             // Call the reenableWalletSuspendedConfigs method via service
@@ -435,7 +438,7 @@ test('wallet approval keeps eylandoo config disabled when remote fails', functio
         'user_id' => $user->id,
         'type' => 'wallet',
         'status' => 'suspended_wallet',
-        'wallet_balance' => -2000,
+        'wallet_balance' => 0,
     ]);
 
     $panel = \App\Models\Panel::factory()->eylandoo()->create();
@@ -452,7 +455,7 @@ test('wallet approval keeps eylandoo config disabled when remote fails', functio
 
     $transaction = Transaction::create([
         'user_id' => $user->id,
-        'amount' => 5000,
+        'amount' => 150000, // Use first_topup minimum
         'type' => Transaction::TYPE_DEPOSIT,
         'status' => Transaction::STATUS_PENDING,
         'description' => 'شارژ کیف پول ریسلر',
@@ -463,8 +466,10 @@ test('wallet approval keeps eylandoo config disabled when remote fails', functio
         $transaction->update(['status' => Transaction::STATUS_COMPLETED]);
         $reseller->increment('wallet_balance', $transaction->amount);
 
+        // Use first_topup threshold for reactivation
+        $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
         if ($reseller->isSuspendedWallet() &&
-            $reseller->wallet_balance > config('billing.wallet.suspension_threshold', -1000)) {
+            $reseller->wallet_balance >= $reactivationThreshold) {
             $reseller->update(['status' => 'active']);
             
             // Call the reenableWalletSuspendedConfigs method via service
