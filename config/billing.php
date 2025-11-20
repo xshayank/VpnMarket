@@ -59,17 +59,6 @@ return [
          */
         'minimum_delta_bytes_to_charge' => env('WALLET_MINIMUM_DELTA_BYTES_TO_CHARGE', 5 * 1024 * 1024),
 
-        /*
-         * Lock TTL (in seconds) for the charge operation
-         * Prevents concurrent executions per reseller when running every minute
-         */
-        'charge_lock_ttl_seconds' => env('WALLET_CHARGE_LOCK_TTL_SECONDS', 20),
-
-        /*
-         * Cache lock key prefix for wallet charging
-         * Used to prevent concurrent charge operations on the same reseller
-         */
-        'charge_lock_key_prefix' => env('WALLET_CHARGE_LOCK_KEY_PREFIX', 'wallet_charge'),
     ],
 
     /*

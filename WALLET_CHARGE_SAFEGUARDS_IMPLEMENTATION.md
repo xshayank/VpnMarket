@@ -8,8 +8,7 @@ This implementation adds comprehensive safeguards to prevent double-charging in 
 ### 1. Double-Charging Prevention
 - **Risk**: Manual repeated execution of `php artisan reseller:charge-wallet-hourly` could charge the same reseller multiple times
 - **Risk**: No idempotency guard to prevent charging within a short time window
-- **Risk**: No locking mechanism to prevent concurrent charges
-- **Solution**: Implemented idempotency window (55 minutes default), cache-based locking, and cycle tracking
+- **Solution**: Implemented idempotency window (55 minutes default) and cycle tracking
 
 ### 2. Wallet Reseller Re-Enable Issue ⭐ **CRITICAL FIX**
 - **Problem**: When wallet resellers topped up their balance after suspension, they remained suspended and configs stayed disabled
@@ -36,7 +35,6 @@ Added to `config/billing.php`:
 'wallet' => [
     'hourly_charge_enabled' => env('WALLET_HOURLY_CHARGE_ENABLED', true),
     'charge_idempotency_minutes' => env('WALLET_CHARGE_IDEMPOTENCY_MINUTES', 55),
-    'charge_lock_key_prefix' => env('WALLET_CHARGE_LOCK_KEY_PREFIX', 'wallet_charge'),
 ],
 ```
 
@@ -55,7 +53,6 @@ php artisan reseller:charge-wallet-once --reseller=123
 ### Structured Logging Events
 - `wallet_charge_cycle_start` - Cycle begins with delta estimation
 - `wallet_charge_skipped_recent_snapshot` - Idempotency skip
-- `wallet_charge_lock_failed` - Concurrent execution detected
 - `wallet_charge_applied` - Successful charge with full metrics
 - `wallet_charge_dry_run` - Dry run estimation
 - `wallet_reseller_suspended` - Suspension due to low balance
@@ -92,12 +89,6 @@ Configs disabled by wallet suspension now include:
 1. Before charging, check if the last snapshot was created within the idempotency window (55 minutes default)
 2. If yes, skip the charge (unless `--force` flag is used)
 3. Log the skip with `wallet_charge_skipped_recent_snapshot`
-
-### Locking Mechanism
-1. Before charging a reseller, acquire a cache lock: `wallet_charge:reseller:{id}`
-2. Lock timeout: 60 seconds
-3. If lock cannot be acquired, skip with `wallet_charge_lock_failed` log
-4. Lock is released after charge completes or fails
 
 ### Wallet Reseller Re-Enable Flow
 1. **Manual Top-Up** (via Starsefar/Tetra98 payment gateways):
@@ -173,11 +164,10 @@ Comprehensive test suite with 21 tests covering:
 4. **Monitor logs** for structured logging events
 
 5. **Update environment variables** (optional):
-   ```env
-   WALLET_HOURLY_CHARGE_ENABLED=true
-   WALLET_CHARGE_IDEMPOTENCY_MINUTES=55
-   WALLET_CHARGE_LOCK_KEY_PREFIX=wallet_charge
-   ```
+    ```env
+    WALLET_HOURLY_CHARGE_ENABLED=true
+    WALLET_CHARGE_IDEMPOTENCY_MINUTES=55
+    ```
 
 ## Rollback Plan
 
@@ -199,7 +189,6 @@ Comprehensive test suite with 21 tests covering:
 ## Security & Safety
 
 ### Double-Charge Prevention
-- ✅ Cache locks prevent concurrent charges
 - ✅ Idempotency window prevents rapid re-execution
 - ✅ Cycle tracking in snapshot metadata
 - ✅ Structured logs for audit trail
@@ -221,13 +210,11 @@ Comprehensive test suite with 21 tests covering:
 ### Key Metrics to Monitor
 1. **Charge Cycles**: Count of `wallet_charge_applied` events per hour (should be ~1 per hour per wallet reseller)
 2. **Idempotency Skips**: Count of `wallet_charge_skipped_recent_snapshot` (high count = potential issue)
-3. **Lock Failures**: Count of `wallet_charge_lock_failed` (should be rare)
-4. **Suspensions**: Count of `wallet_reseller_suspended` events
-5. **Re-Enables**: Count of `wallet_reseller_reenable_complete` events
+3. **Suspensions**: Count of `wallet_reseller_suspended` events
+4. **Re-Enables**: Count of `wallet_reseller_reenable_complete` events
 
 ### Alerts to Configure
 - Alert if `wallet_charge_applied` occurs >2 times per hour for same reseller (possible double-charge)
-- Alert if `wallet_charge_lock_failed` count >10/hour (lock contention)
 - Alert if `wallet_reseller_reenable_complete` with `configs_failed` >0 (panel communication issues)
 
 ## Follow-Up Tasks (Optional)
