@@ -43,7 +43,48 @@ test('consecutive runs without new usage do not double-charge', function () {
     expect($reseller->usageSnapshots()->count())->toBe(1);
 });
 
-test('force option still charges when usage increases immediately', function () {
+test('hourly job charges every wallet reseller in a cycle', function () {
+    Config::set('billing.wallet.price_per_gb', 1000);
+
+    $user = User::factory()->create();
+
+    $firstReseller = Reseller::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'wallet',
+        'wallet_balance' => 10000,
+        'wallet_price_per_gb' => 1000,
+    ]);
+
+    $secondReseller = Reseller::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'wallet',
+        'wallet_balance' => 12000,
+        'wallet_price_per_gb' => 1000,
+    ]);
+
+    // Give each reseller distinct usage so we can confirm both are charged
+    ResellerConfig::factory()->create([
+        'reseller_id' => $firstReseller->id,
+        'usage_bytes' => 1 * 1024 * 1024 * 1024,
+    ]);
+
+    ResellerConfig::factory()->create([
+        'reseller_id' => $secondReseller->id,
+        'usage_bytes' => 2 * 1024 * 1024 * 1024,
+    ]);
+
+    Artisan::call('reseller:charge-wallet-hourly');
+
+    $firstReseller->refresh();
+    $secondReseller->refresh();
+
+    expect($firstReseller->wallet_balance)->toBe(9000);
+    expect($secondReseller->wallet_balance)->toBe(10000);
+    expect($firstReseller->usageSnapshots()->count())->toBe(1);
+    expect($secondReseller->usageSnapshots()->count())->toBe(1);
+});
+
+test('second run charges immediately when usage increases', function () {
     Config::set('billing.wallet.price_per_gb', 1000);
 
     $user = User::factory()->create();
@@ -71,10 +112,9 @@ test('force option still charges when usage increases immediately', function () 
         'usage_bytes' => 0.5 * 1024 * 1024 * 1024, // 0.5 GB
     ]);
 
-    // Second charge with force flag - should bypass idempotency
+    // Second charge without delay - should charge new usage immediately
     Artisan::call('reseller:charge-wallet-once', [
         '--reseller' => $reseller->id,
-        '--force' => true,
     ]);
 
     $reseller->refresh();
@@ -220,13 +260,12 @@ test('suspension: configs disabled once per cycle', function () {
     
     $cycleHour = $config->meta['disabled_by_wallet_suspension_cycle_at'];
 
-    // Try to force another charge in the same cycle
-    // Even if forced, the config should not be disabled again
+    // Try to charge again in the same cycle
+    // Even if the command re-runs, the config should not be disabled again
     $initialDisabledAt = $config->disabled_at;
     
     Artisan::call('reseller:charge-wallet-once', [
         '--reseller' => $reseller->id,
-        '--force' => true,
     ]);
     
     $config->refresh();

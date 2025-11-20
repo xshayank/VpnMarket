@@ -13,17 +13,16 @@ class ChargeWalletResellerOnce extends Command
      *
      * @var string
      */
-    protected $signature = 'reseller:charge-wallet-once 
+    protected $signature = 'reseller:charge-wallet-once
                             {--reseller= : The ID of the reseller to charge}
-                            {--dry-run : Show cost estimate without applying charges}
-                            {--force : Force charge even if within idempotency window}';
+                            {--dry-run : Show cost estimate without applying charges}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Charge a single wallet-based reseller (supports dry-run and force modes)';
+    protected $description = 'Charge a single wallet-based reseller (supports dry-run mode)';
 
     /**
      * Execute the console command.
@@ -32,7 +31,6 @@ class ChargeWalletResellerOnce extends Command
     {
         $resellerId = $this->option('reseller');
         $dryRun = $this->option('dry-run');
-        $force = $this->option('force');
 
         if (!$resellerId) {
             $this->error('Error: --reseller option is required');
@@ -40,13 +38,11 @@ class ChargeWalletResellerOnce extends Command
             $this->info('Usage:');
             $this->info('  php artisan reseller:charge-wallet-once --reseller=<id>');
             $this->info('  php artisan reseller:charge-wallet-once --reseller=<id> --dry-run');
-            $this->info('  php artisan reseller:charge-wallet-once --reseller=<id> --force');
             $this->info('');
             $this->info('Options:');
             $this->info('  --reseller=<id>  Required. The ID of the reseller to charge');
             $this->info('  --dry-run        Show cost estimate without applying charges or creating snapshot');
-            $this->info('  --force          Force charge even if it would normally be skipped');
-            
+
             return Command::FAILURE;
         }
 
@@ -67,9 +63,6 @@ class ChargeWalletResellerOnce extends Command
         if ($dryRun) {
             $this->info('[DRY RUN MODE - No changes will be made]');
         }
-        if ($force) {
-            $this->info('[FORCE MODE - Charge will run regardless of recent activity]');
-        }
         $this->info('');
 
         $cycleStartedAt = now()->startOfMinute()->toIso8601String();
@@ -77,7 +70,7 @@ class ChargeWalletResellerOnce extends Command
         try {
             // Use the shared logic from ChargeWalletResellersHourly
             $hourlyCommand = new ChargeWalletResellersHourly();
-            $result = $hourlyCommand->chargeResellerWithSafeguards($reseller, $cycleStartedAt, $force, $dryRun);
+            $result = $hourlyCommand->chargeResellerWithSafeguards($reseller, $cycleStartedAt, $dryRun);
 
             // Display results in a table
             $this->displayResults($reseller, $result, $dryRun);
@@ -148,10 +141,7 @@ class ChargeWalletResellerOnce extends Command
         if ($result['status'] === 'skipped') {
             $reason = $result['reason'] ?? 'unknown';
 
-            if ($reason === 'recent_snapshot') {
-                $this->warn('⚠ SKIPPED: Recent snapshot exists within idempotency window');
-                $this->info('  Use --force to bypass idempotency check');
-            } elseif ($reason === 'no_usage_delta') {
+            if ($reason === 'no_usage_delta') {
                 $this->warn('⚠ SKIPPED: No new usage detected since last charge');
             } elseif ($reason === 'below_minimum_delta') {
                 $this->warn('⚠ SKIPPED: Usage delta below minimum charge threshold');

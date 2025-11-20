@@ -35,12 +35,6 @@ return [
         'charge_enabled' => env('WALLET_CHARGE_ENABLED', true),
 
         /*
-         * How often (in minutes) to run the wallet charging scheduler
-         * Defaults to once per minute
-         */
-        'charge_frequency_minutes' => env('WALLET_CHARGE_FREQUENCY_MINUTES', 1),
-
-        /*
          * Enable/disable automatic re-enable of wallet-suspended configs
          * When false, configs will not be automatically re-enabled even if balance recovers
          */

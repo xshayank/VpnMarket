@@ -45,13 +45,15 @@ class ChargeWalletResellersHourly extends Command
             'timestamp' => now()->toIso8601String(),
         ]);
 
-        // Find all wallet-based resellers
-        $walletResellers = Reseller::where('type', 'wallet')->get();
+        // Find all wallet-based resellers (cursor to avoid skipping any during iteration)
+        $walletResellersQuery = Reseller::where('type', 'wallet')->orderBy('id');
+        $walletResellers = $walletResellersQuery->cursor();
+        $walletResellerCount = $walletResellersQuery->count();
 
-        $this->info("Found {$walletResellers->count()} wallet-based resellers");
+        $this->info("Found {$walletResellerCount} wallet-based resellers");
         Log::info('wallet_charge_resellers_found', [
             'cycle_started_at' => $cycleStartedAt,
-            'count' => $walletResellers->count(),
+            'count' => $walletResellerCount,
         ]);
 
         $charged = 0;
@@ -102,7 +104,7 @@ class ChargeWalletResellersHourly extends Command
      * Charge a single reseller with safeguards
      * Public method to allow single-reseller command to reuse logic
      */
-    public function chargeResellerWithSafeguards(Reseller $reseller, string $cycleStartedAt, bool $force = false, bool $dryRun = false): array
+    public function chargeResellerWithSafeguards(Reseller $reseller, string $cycleStartedAt, bool $dryRun = false): array
     {
         return $this->chargeReseller($reseller, $cycleStartedAt, $dryRun);
     }

@@ -61,15 +61,12 @@ if (env('SCHEDULE_ENFORCE_RESELLER_WINDOWS', true)) {
 }
 
 // Schedule wallet-based reseller charging
-// Runs every minute (configurable) to charge resellers for traffic usage
+// Runs every minute to charge resellers for traffic usage
 // Deducts cost from wallet balance and suspends if balance is too low
 // Can be disabled via WALLET_CHARGE_ENABLED=false
 if (config('billing.wallet.charge_enabled', true)) {
-    $frequencyMinutes = max(1, (int) config('billing.wallet.charge_frequency_minutes', 1));
-    $cronExpression = "*/{$frequencyMinutes} * * * *";
-
     Schedule::command('reseller:charge-wallet-hourly')
-        ->cron($cronExpression)
+        ->everyMinute()
         ->withoutOverlapping()
         ->onOneServer()
         ->runInBackground();
