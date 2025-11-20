@@ -67,15 +67,16 @@ class ResellerResource extends Resource
                 Forms\Components\Section::make('تنظیمات کیف پول')
                     ->visible(fn (Forms\Get $get) => $get('type') === 'wallet')
                     ->schema([
-                        Forms\Components\Select::make('primary_panel_id')
-                            ->label('پنل')
-                            ->relationship('primaryPanel', 'name')
+                        Forms\Components\Select::make('panels')
+                            ->label('پنل‌ها')
+                            ->relationship('panels', 'name')
+                            ->multiple()
                             ->searchable()
                             ->preload()
                             ->live()
                             ->reactive()
                             ->required()
-                            ->helperText('پنل V2Ray که این ریسلر از آن استفاده می‌کند'),
+                            ->helperText('پنل‌هایی که این ریسلر می‌تواند از آنها استفاده کند. حداقل یک پنل باید انتخاب شود.'),
 
                         Forms\Components\TextInput::make('config_limit')
                             ->label('محدودیت تعداد کانفیگ')
@@ -97,117 +98,12 @@ class ResellerResource extends Resource
                             ->nullable()
                             ->helperText('قیمت سفارشی برای هر گیگابایت. اگر خالی باشد از قیمت پیش‌فرض ('.config('billing.wallet.price_per_gb', 780).' تومان) استفاده می‌شود'),
 
-                        // Marzneshin Service Selection
-                        Forms\Components\Section::make('سرویسهای مرزنشین (Marzneshin)')
-                            ->description('سرویسهای مرزنشین مجاز برای این ریسلر')
-                            ->collapsed()
-                            ->visible(function (Forms\Get $get) {
-                                $panelId = $get('primary_panel_id');
-                                if (! $panelId) {
-                                    return false;
-                                }
-
-                                $panel = \App\Models\Panel::find($panelId);
-
-                                return $panel && $panel->panel_type === 'marzneshin';
-                            })
-                            ->schema([
-                                Forms\Components\CheckboxList::make('marzneshin_allowed_service_ids')
-                                    ->label('انتخاب سرویس‌ها')
-                                    ->options(function (Forms\Get $get) {
-                                        $panelId = $get('primary_panel_id');
-                                        if (! $panelId) {
-                                            return [];
-                                        }
-
-                                        $panel = \App\Models\Panel::find($panelId);
-                                        if (! $panel || $panel->panel_type !== 'marzneshin') {
-                                            return [];
-                                        }
-
-                                        try {
-                                            $credentials = $panel->getCredentials();
-                                            $nodeHostname = $credentials['extra']['node_hostname'] ?? '';
-
-                                            $marzneshinService = new \App\Services\MarzneshinService(
-                                                $credentials['url'],
-                                                $credentials['username'],
-                                                $credentials['password'],
-                                                $nodeHostname
-                                            );
-
-                                            $services = $marzneshinService->listServices();
-                                            $options = [];
-
-                                            foreach ($services as $service) {
-                                                $options[$service['id']] = $service['name'];
-                                            }
-
-                                            return $options;
-                                        } catch (\Exception $e) {
-                                            \Illuminate\Support\Facades\Log::error('Failed to load Marzneshin services: '.$e->getMessage());
-
-                                            return [];
-                                        }
-                                    })
-                                    ->helperText('در صورتی که لیست خالی است، لطفاً اطمینان حاصل کنید که اطلاعات اتصال پنل به درستی وارد شده است.')
-                                    ->columns(2),
-                            ]),
-
-                        // Eylandoo Node Selection
-                        Forms\Components\Section::make('تنظیمات نودهای Eylandoo')
-                            ->description('محدود کردن دسترسی ریسلر به نودهای خاص در پنل Eylandoo')
-                            ->visible(function (Forms\Get $get) {
-                                $panelId = $get('primary_panel_id');
-                                if (! $panelId) {
-                                    return false;
-                                }
-
-                                $panel = \App\Models\Panel::find($panelId);
-
-                                return $panel && $panel->panel_type === 'eylandoo';
-                            })
-                            ->schema([
-                                Forms\Components\CheckboxList::make('eylandoo_allowed_node_ids')
-                                    ->label('انتخاب نودها (اختیاری)')
-                                    ->live()
-                                    ->options(function (Forms\Get $get) {
-                                        $panelId = $get('primary_panel_id');
-                                        if (! $panelId) {
-                                            \Illuminate\Support\Facades\Log::debug('Eylandoo nodes: No primary_panel_id in form state');
-
-                                            return [];
-                                        }
-
-                                        $panel = \App\Models\Panel::find($panelId);
-                                        if (! $panel) {
-                                            \Illuminate\Support\Facades\Log::debug("Eylandoo nodes: Panel {$panelId} not found");
-
-                                            return [];
-                                        }
-
-                                        if ($panel->panel_type !== 'eylandoo') {
-                                            return [];
-                                        }
-
-                                        // Use cached method (5 minute cache)
-                                        $nodes = $panel->getCachedEylandooNodes();
-
-                                        if (empty($nodes)) {
-                                            \Illuminate\Support\Facades\Log::warning("Eylandoo nodes: No nodes returned for panel {$panelId}. Check panel credentials and API connectivity.");
-                                        }
-
-                                        $options = [];
-
-                                        foreach ($nodes as $node) {
-                                            $options[$node['id']] = $node['name'];
-                                        }
-
-                                        return $options;
-                                    })
-                                    ->helperText('انتخاب نود اختیاری است. اگر هیچ نودی انتخاب نشود، ریسلر می‌تواند از تمام نودها استفاده کند.')
-                                    ->columns(2),
-                            ]),
+                        // Note: Panel-specific node/service configuration moved to multi-panel system
+                        // These can be configured when assigning panels to resellers
+                        Forms\Components\Placeholder::make('multi_panel_note')
+                            ->label('')
+                            ->content('برای پیکربندی نودها و سرویس‌های خاص هر پنل، از بخش "مدیریت پنل‌ها" در زیر استفاده کنید.')
+                            ->helperText('پس از ایجاد ریسلر، می‌توانید تنظیمات هر پنل را جداگانه مدیریت کنید.'),
                     ]),
 
                 Forms\Components\Select::make('status')
@@ -226,15 +122,16 @@ class ResellerResource extends Resource
                 Forms\Components\Section::make('تنظیمات ترافیک‌محور')
                     ->visible(fn (Forms\Get $get) => $get('type') === 'traffic')
                     ->schema([
-                        Forms\Components\Select::make('primary_panel_id')
-                            ->label('پنل')
-                            ->relationship('primaryPanel', 'name')
+                        Forms\Components\Select::make('panels')
+                            ->label('پنل‌ها')
+                            ->relationship('panels', 'name')
+                            ->multiple()
                             ->searchable()
                             ->preload()
                             ->live()
                             ->reactive()
                             ->required()
-                            ->helperText('پنل V2Ray که این ریسلر از آن استفاده می‌کند'),
+                            ->helperText('پنل‌هایی که این ریسلر می‌تواند از آنها استفاده کند'),
 
                         Forms\Components\TextInput::make('traffic_total_gb')
                             ->label('ترافیک کل (GB)')
@@ -269,121 +166,11 @@ class ResellerResource extends Resource
                             ->helperText('اگر خالی باشد، محدودیت زمانی ندارد')
                             ->visible(fn (string $operation) => $operation === 'edit'),
 
-                        Forms\Components\Section::make('سرویسهای مرزنشین (Marzneshin)')
-                            ->description('سرویسهای مرزنشین مجاز برای این ریسلر')
-                            ->collapsed()
-                            ->visible(function (Forms\Get $get) {
-                                $panelId = $get('primary_panel_id');
-                                if (! $panelId) {
-                                    return false;
-                                }
-
-                                $panel = \App\Models\Panel::find($panelId);
-
-                                return $panel && $panel->panel_type === 'marzneshin';
-                            })
-                            ->schema([
-                                Forms\Components\CheckboxList::make('marzneshin_allowed_service_ids')
-                                    ->label('انتخاب سرویس‌ها')
-                                    ->options(function (Forms\Get $get) {
-                                        $panelId = $get('primary_panel_id');
-                                        if (! $panelId) {
-                                            return [];
-                                        }
-
-                                        $panel = \App\Models\Panel::find($panelId);
-                                        if (! $panel || $panel->panel_type !== 'marzneshin') {
-                                            return [];
-                                        }
-
-                                        try {
-                                            $credentials = $panel->getCredentials();
-                                            $nodeHostname = $credentials['extra']['node_hostname'] ?? '';
-
-                                            $marzneshinService = new \App\Services\MarzneshinService(
-                                                $credentials['url'],
-                                                $credentials['username'],
-                                                $credentials['password'],
-                                                $nodeHostname
-                                            );
-
-                                            $services = $marzneshinService->listServices();
-                                            $options = [];
-
-                                            foreach ($services as $service) {
-                                                $options[$service['id']] = $service['name'];
-                                            }
-
-                                            return $options;
-                                        } catch (\Exception $e) {
-                                            \Illuminate\Support\Facades\Log::error('Failed to load Marzneshin services: '.$e->getMessage());
-
-                                            return [];
-                                        }
-                                    })
-                                    ->helperText('در صورتی که لیست خالی است، لطفاً اطمینان حاصل کنید که اطلاعات اتصال پنل به درستی وارد شده است.')
-                                    ->columns(2),
-                            ]),
-
-                        // Eylandoo Node Selection (Traffic-based resellers only)
-                        Forms\Components\Section::make('تنظیمات نودهای Eylandoo')
-                            ->description('محدود کردن دسترسی ریسلر به نودهای خاص در پنل Eylandoo')
-                            ->visible(function (Forms\Get $get) {
-                                $type = $get('type');
-                                if ($type !== 'traffic') {
-                                    return false;
-                                }
-
-                                $panelId = $get('primary_panel_id');
-                                if (! $panelId) {
-                                    return false;
-                                }
-
-                                $panel = \App\Models\Panel::find($panelId);
-
-                                return $panel && $panel->panel_type === 'eylandoo';
-                            })
-                            ->schema([
-                                Forms\Components\CheckboxList::make('eylandoo_allowed_node_ids')
-                                    ->label('انتخاب نودها (اختیاری)')
-                                    ->live()
-                                    ->options(function (Forms\Get $get) {
-                                        $panelId = $get('primary_panel_id');
-                                        if (! $panelId) {
-                                            \Illuminate\Support\Facades\Log::debug('Eylandoo nodes: No primary_panel_id in form state');
-
-                                            return [];
-                                        }
-
-                                        $panel = \App\Models\Panel::find($panelId);
-                                        if (! $panel) {
-                                            \Illuminate\Support\Facades\Log::debug("Eylandoo nodes: Panel {$panelId} not found");
-
-                                            return [];
-                                        }
-
-                                        if ($panel->panel_type !== 'eylandoo') {
-                                            return [];
-                                        }
-
-                                        // Use cached method (5 minute cache)
-                                        $nodes = $panel->getCachedEylandooNodes();
-
-                                        if (empty($nodes)) {
-                                            \Illuminate\Support\Facades\Log::warning("Eylandoo nodes: No nodes returned for panel {$panelId}. Check panel credentials and API connectivity.");
-                                        }
-
-                                        $options = [];
-
-                                        foreach ($nodes as $node) {
-                                            $options[$node['id']] = $node['name'];
-                                        }
-
-                                        return $options;
-                                    })
-                                    ->helperText('انتخاب نود اختیاری است. اگر هیچ نودی انتخاب نشود، ریسلر می‌تواند از تمام نودها استفاده کند.')
-                                    ->columns(2),
-                            ]),
+                        // Note: Panel-specific node/service configuration moved to multi-panel system
+                        Forms\Components\Placeholder::make('multi_panel_note_traffic')
+                            ->label('')
+                            ->content('برای پیکربندی نودها و سرویس‌های خاص هر پنل، از قسمت "Panels" در صفحه ویرایش استفاده کنید.')
+                            ->helperText('تنظیمات هر پنل را می‌توانید جداگانه مدیریت کنید.'),
                     ]),
 
                 Forms\Components\Section::make('پلن‌های مجاز')
@@ -516,10 +303,27 @@ class ResellerResource extends Resource
                         return $record->window_starts_at->format('Y-m-d').' تا '.$record->window_ends_at->format('Y-m-d');
                     }),
 
-                Tables\Columns\TextColumn::make('panel.name')
-                    ->label('پنل')
-                    ->description(fn (Reseller $record): string => $record->panel ? ($record->panel->panel_type ?? '-') : '-')
-                    ->visible(fn ($record): bool => $record && $record->type === 'traffic'),
+                Tables\Columns\TextColumn::make('panels_list')
+                    ->label('پنل‌ها')
+                    ->formatStateUsing(function (Reseller $record): string {
+                        $panels = $record->panels;
+                        if ($panels->isEmpty()) {
+                            return '-';
+                        }
+
+                        return $panels->pluck('name')->join(', ');
+                    })
+                    ->description(function (Reseller $record): string {
+                        $panels = $record->panels;
+                        if ($panels->isEmpty()) {
+                            return 'هیچ پنلی تخصیص داده نشده';
+                        }
+
+                        $types = $panels->pluck('panel_type')->unique()->join(', ');
+
+                        return "تعداد: {$panels->count()} | نوع: {$types}";
+                    })
+                    ->wrap(),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('تاریخ ایجاد')
@@ -543,9 +347,21 @@ class ResellerResource extends Resource
                         'suspended' => 'معلق',
                     ]),
 
+                Tables\Filters\SelectFilter::make('panels')
+                    ->label('فیلتر بر اساس پنل')
+                    ->relationship('panels', 'name')
+                    ->multiple()
+                    ->preload(),
+
                 Tables\Filters\SelectFilter::make('panel_type')
                     ->label('نوع پنل')
-                    ->relationship('panel', 'panel_type')
+                    ->query(function ($query, $state) {
+                        if ($state['value'] ?? false) {
+                            $query->whereHas('panels', function ($q) use ($state) {
+                                $q->where('panel_type', $state['value']);
+                            });
+                        }
+                    })
                     ->options([
                         'marzban' => 'Marzban',
                         'marzneshin' => 'Marzneshin',
