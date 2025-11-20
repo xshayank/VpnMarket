@@ -45,7 +45,7 @@ class ChargeWalletResellerOnce extends Command
             $this->info('Options:');
             $this->info('  --reseller=<id>  Required. The ID of the reseller to charge');
             $this->info('  --dry-run        Show cost estimate without applying charges or creating snapshot');
-            $this->info('  --force          Force charge even if within idempotency window');
+            $this->info('  --force          Force charge even if it would normally be skipped');
             
             return Command::FAILURE;
         }
@@ -68,7 +68,7 @@ class ChargeWalletResellerOnce extends Command
             $this->info('[DRY RUN MODE - No changes will be made]');
         }
         if ($force) {
-            $this->info('[FORCE MODE - Bypassing idempotency window]');
+            $this->info('[FORCE MODE - Charge will run regardless of recent activity]');
         }
         $this->info('');
 

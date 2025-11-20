@@ -7,9 +7,8 @@ use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 
-test('idempotency: consecutive runs do not double-charge', function () {
+test('consecutive runs without new usage do not double-charge', function () {
     Config::set('billing.wallet.price_per_gb', 1000);
-    Config::set('billing.wallet.charge_idempotency_seconds', 50);
 
     $user = User::factory()->create();
     $reseller = Reseller::factory()->create([
@@ -34,7 +33,7 @@ test('idempotency: consecutive runs do not double-charge', function () {
     expect($balanceAfterFirst)->toBe(9000);
     expect($reseller->usageSnapshots()->count())->toBe(1);
 
-    // Second charge immediately - should skip due to idempotency
+    // Second charge immediately - should skip due to no delta
     Artisan::call('reseller:charge-wallet-hourly');
     $reseller->refresh();
     
@@ -44,9 +43,8 @@ test('idempotency: consecutive runs do not double-charge', function () {
     expect($reseller->usageSnapshots()->count())->toBe(1);
 });
 
-test('idempotency: forced charge bypasses idempotency window', function () {
+test('force option still charges when usage increases immediately', function () {
     Config::set('billing.wallet.price_per_gb', 1000);
-    Config::set('billing.wallet.charge_idempotency_seconds', 50);
 
     $user = User::factory()->create();
     $reseller = Reseller::factory()->create([
@@ -78,13 +76,13 @@ test('idempotency: forced charge bypasses idempotency window', function () {
         '--reseller' => $reseller->id,
         '--force' => true,
     ]);
-    
+
     $reseller->refresh();
-    
+
     // Should have charged for additional 0.5 GB (delta from last snapshot)
     // Total usage now: 1.5 GB, last snapshot: 1 GB, delta: 0.5 GB
     // Cost: 0.5 * 1000 = 500 (ceiling)
-    expect($reseller->wallet_balance)->toBeLessThan(9000);
+    expect($reseller->wallet_balance)->toBe(8500);
     expect($reseller->usageSnapshots()->count())->toBe(2);
 });
 
