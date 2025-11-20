@@ -237,7 +237,7 @@ class WalletTopUpTransactionResource extends Resource
                                     ]);
 
                                     // Re-enable configs that were auto-disabled due to wallet suspension
-                                    $reenableService = new WalletResellerReenableService();
+                                    $reenableService = new WalletResellerReenableService;
                                     $reenableStats = $reenableService->reenableWalletSuspendedConfigs($reseller);
 
                                     dispatch(new ReenableResellerConfigsJob($reseller, 'wallet'));
