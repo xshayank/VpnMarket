@@ -1,19 +1,18 @@
 <?php
 
+use App\Models\Panel;
 use App\Models\Reseller;
 use App\Models\ResellerConfig;
 use App\Models\Setting;
-use App\Models\Panel;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Support\PaymentMethodConfig;
 use App\Support\Tetra98Config;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+
 use function Pest\Laravel\actingAs;
-use function Pest\Laravel\post;
 use function Pest\Laravel\get;
+use function Pest\Laravel\post;
 
 beforeEach(function () {
     PaymentMethodConfig::clearCache();
@@ -41,14 +40,10 @@ it('credits wallet and reactivates suspended_wallet reseller when balance reache
         'type' => Reseller::TYPE_WALLET,
         'status' => 'suspended_wallet',
         'wallet_balance' => 0,
-        'primary_panel_id' => $panel->id,
-        'panel_id' => $panel->id,
     ]);
 
-    DB::table('resellers')->whereKey($reseller->id)->update([
-        'primary_panel_id' => $panel->id,
-        'panel_id' => $panel->id,
-    ]);
+    // Attach panel using multi-panel system
+    $reseller->panels()->attach($panel->id);
 
     // Create a disabled config with wallet suspension metadata
     $config = ResellerConfig::factory()->create([
@@ -125,9 +120,10 @@ it('allows activated wallet reseller to access reseller routes after callback', 
         'type' => Reseller::TYPE_WALLET,
         'status' => 'suspended_wallet',
         'wallet_balance' => 0,
-        'primary_panel_id' => $panel->id,
-        'panel_id' => $panel->id,
     ]);
+
+    // Attach panel using multi-panel system
+    $reseller->panels()->attach($panel->id);
 
     $authority = 'AUTH_WALLET_ACCESS';
     $transaction = Transaction::create([
@@ -168,12 +164,6 @@ it('allows activated wallet reseller to access reseller routes after callback', 
 
     expect($reseller->status)->toBe('active');
     expect($transaction->status)->toBe(Transaction::STATUS_COMPLETED);
-
-    DB::table('resellers')->whereKey($reseller->id)->update([
-        'primary_panel_id' => $panel->id,
-        'panel_id' => $panel->id,
-    ]);
-    $reseller->refresh();
 
     actingAs($user);
 
@@ -315,7 +305,7 @@ it('is idempotent - second callback does not double credit or re-enable', functi
     ])->assertOk();
 
     $reseller->refresh();
-    
+
     // Balance should NOT be doubled
     expect($reseller->wallet_balance)->toBe(150000);
 });
@@ -443,7 +433,7 @@ it('returns 400 when authority is missing from callback', function () {
 it('returns 200 when transaction already completed (idempotency)', function () {
     $user = User::factory()->create();
     $authority = 'AUTH_ALREADY_COMPLETED';
-    
+
     // Create already-completed transaction
     $transaction = Transaction::create([
         'user_id' => $user->id,

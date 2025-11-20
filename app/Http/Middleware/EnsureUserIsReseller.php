@@ -43,8 +43,8 @@ class EnsureUserIsReseller
             $walletMin = (int) config('billing.reseller.first_topup.wallet_min', 150000);
             $trafficMin = (int) config('billing.reseller.first_topup.traffic_min_gb', 250);
             $message = $reseller->isSuspendedTraffic()
-                ? "برای فعال‌سازی حساب، ابتدا حداقل ".number_format($trafficMin)." گیگابایت ترافیک خریداری کنید."
-                : "برای فعال‌سازی حساب، ابتدا حداقل ".number_format($walletMin)." تومان شارژ کنید.";
+                ? 'برای فعال‌سازی حساب، ابتدا حداقل '.number_format($trafficMin).' گیگابایت ترافیک خریداری کنید.'
+                : 'برای فعال‌سازی حساب، ابتدا حداقل '.number_format($walletMin).' تومان شارژ کنید.';
 
             Log::info('reseller_panel_redirect', [
                 'reseller_id' => $reseller->id,
@@ -55,17 +55,18 @@ class EnsureUserIsReseller
             return redirect()->route('wallet.charge.form')->with('warning', $message);
         }
 
-        if (! $reseller->hasPrimaryPanel()) {
+        // Check if reseller has any panels assigned (multi-panel system)
+        if (! $reseller->hasAnyPanels()) {
             Log::warning('reseller_panel_redirect', [
                 'reseller_id' => $reseller->id,
                 'status' => $reseller->status,
                 'type' => $reseller->type,
-                'reason' => 'missing_primary_panel',
+                'reason' => 'no_panels_assigned',
             ]);
 
             return redirect()->route('wallet.charge.form')->with(
                 'warning',
-                'هیچ پنل فعالی برای شما تنظیم نشده است. لطفاً با پشتیبانی برای اختصاص پنل تماس بگیرید.'
+                'هیچ پنلی برای شما تنظیم نشده است. لطفاً با پشتیبانی برای دسترسی به پنل تماس بگیرید.'
             );
         }
 

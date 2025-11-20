@@ -114,7 +114,7 @@ class Reseller extends Model
     /**
      * Legacy relationship for backward compatibility
      * Maps to primary_panel_id
-     * 
+     *
      * @deprecated Use primaryPanel() instead
      */
     public function panel(): BelongsTo
@@ -217,8 +217,6 @@ class Reseller extends Model
      * Check if reseller supports config management (CRUD operations)
      * Both traffic-based and wallet-based resellers can manage configs
      * Only plan-based resellers cannot
-     *
-     * @return bool
      */
     public function supportsConfigManagement(): bool
     {
@@ -271,7 +269,7 @@ class Reseller extends Model
             'suspended',
             'suspended_wallet',
             'suspended_traffic',
-            'suspended_other'
+            'suspended_other',
         ], true);
     }
 
@@ -303,12 +301,21 @@ class Reseller extends Model
 
     /**
      * Check if reseller has a primary panel assigned
-     * 
-     * @return bool
+     *
+     * @deprecated Use hasAnyPanels() for multi-panel architecture
      */
     public function hasPrimaryPanel(): bool
     {
-        return (bool) $this->primary_panel_id;
+        // For backward compatibility, check both primary_panel_id and multi-panel access
+        return (bool) $this->primary_panel_id || $this->hasAnyPanels();
+    }
+
+    /**
+     * Check if reseller has any panels assigned (multi-panel system)
+     */
+    public function hasAnyPanels(): bool
+    {
+        return $this->panels()->exists();
     }
 
     /**
