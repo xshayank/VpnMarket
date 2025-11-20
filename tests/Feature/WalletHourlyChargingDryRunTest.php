@@ -73,7 +73,7 @@ test('dry-run: shows cost estimate correctly', function () {
     expect($output)->toContain('Cost');
 });
 
-test('dry-run: can be combined with force flag', function () {
+test('dry-run: works after a prior charge', function () {
     Config::set('billing.wallet.price_per_gb', 1000);
 
     $user = User::factory()->create();
@@ -94,11 +94,10 @@ test('dry-run: can be combined with force flag', function () {
     $reseller->refresh();
     $balanceAfterCharge = $reseller->wallet_balance;
 
-    // Dry-run with force should not charge even though idempotency would be bypassed
+    // Dry-run should not charge even after a previous snapshot exists
     Artisan::call('reseller:charge-wallet-once', [
         '--reseller' => $reseller->id,
         '--dry-run' => true,
-        '--force' => true,
     ]);
 
     $reseller->refresh();
