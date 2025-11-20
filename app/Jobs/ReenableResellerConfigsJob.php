@@ -13,8 +13,8 @@ class ReenableResellerConfigsJob implements ShouldQueue
 {
     use Queueable;
 
-    protected Reseller $reseller;
-    protected string $suspensionReason;
+    public Reseller $reseller;
+    public string $suspensionReason;
 
     /**
      * Create a new job instance.
