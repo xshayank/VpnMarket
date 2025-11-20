@@ -54,11 +54,21 @@ class ResellerFactory extends Factory
 
     public function walletBased(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'type' => 'wallet',
-            'wallet_balance' => 10000,
-            'wallet_price_per_gb' => null,
-        ]);
+        return $this->state(function (array $attributes) {
+            $defaultBalance = 10000;
+            $firstTopupMin = config('billing.reseller.first_topup.wallet_min', 150000);
+            
+            return [
+                'type' => 'wallet',
+                'wallet_balance' => $defaultBalance,
+                'wallet_price_per_gb' => null,
+                'status' => $defaultBalance >= $firstTopupMin ? 'active' : 'suspended_wallet',
+            ];
+        })->afterMaking(function (Reseller $reseller) {
+            // Recalculate status based on actual wallet_balance after all attributes are merged
+            $firstTopupMin = config('billing.reseller.first_topup.wallet_min', 150000);
+            $reseller->status = $reseller->wallet_balance >= $firstTopupMin ? 'active' : 'suspended_wallet';
+        });
     }
 
     public function suspendedWallet(): static

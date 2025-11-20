@@ -13,8 +13,8 @@ class ReenableResellerConfigsJob implements ShouldQueue
 {
     use Queueable;
 
-    protected Reseller $reseller;
-    protected string $suspensionReason;
+    public Reseller $reseller;
+    public string $suspensionReason;
 
     /**
      * Create a new job instance.
@@ -35,6 +35,43 @@ class ReenableResellerConfigsJob implements ShouldQueue
             'user_id' => $this->reseller->user_id,
             'suspension_reason' => $this->suspensionReason,
         ]);
+
+        // Check if auto re-enable is enabled
+        if (!config('billing.wallet.auto_reenable_enabled', true)) {
+            Log::info('wallet_reenable_skipped', [
+                'reseller_id' => $this->reseller->id,
+                'reason' => 'auto_reenable_disabled',
+                'suspension_reason' => $this->suspensionReason,
+            ]);
+            return;
+        }
+
+        // Guard clause for wallet suspensions: ensure reseller is active and balance is above threshold
+        if ($this->suspensionReason === 'wallet') {
+            $suspensionThreshold = config('billing.wallet.suspension_threshold', -1000);
+            
+            if ($this->reseller->status !== 'active') {
+                Log::info('wallet_reenable_skipped', [
+                    'reseller_id' => $this->reseller->id,
+                    'reason' => 'reseller_not_active',
+                    'status' => $this->reseller->status,
+                    'balance' => $this->reseller->wallet_balance,
+                    'threshold' => $suspensionThreshold,
+                ]);
+                return;
+            }
+
+            if ($this->reseller->wallet_balance <= $suspensionThreshold) {
+                Log::info('wallet_reenable_skipped', [
+                    'reseller_id' => $this->reseller->id,
+                    'reason' => 'balance_below_threshold',
+                    'status' => $this->reseller->status,
+                    'balance' => $this->reseller->wallet_balance,
+                    'threshold' => $suspensionThreshold,
+                ]);
+                return;
+            }
+        }
 
         $metaKey = $this->suspensionReason === 'wallet' 
             ? 'disabled_by_wallet_suspension' 

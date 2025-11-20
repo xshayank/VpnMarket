@@ -7,7 +7,6 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
-use Modules\Reseller\Jobs\ReenableResellerConfigsJob;
 use Modules\Reseller\Jobs\SyncResellerUsageJob;
 
 Artisan::command('inspire', function () {
@@ -40,11 +39,12 @@ Schedule::call(function () {
 
 // Schedule reseller config re-enable job
 // Runs every minute to quickly re-enable configs when reseller recovers
-Schedule::call(function () {
-    Log::info('Scheduler tick: ReenableResellerConfigsJob - dispatching to queue');
-    ReenableResellerConfigsJob::dispatch();
-    Log::info('Scheduler tick: ReenableResellerConfigsJob dispatched successfully (will run async on queue)');
-})->everyMinute();
+// Uses a command to find eligible resellers and queue jobs with proper parameters
+Schedule::command('reseller:reenable-wallet-disabled')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->runInBackground();
 
 // Schedule reseller time window enforcement command
 // Runs every 5 minutes to enforce time limits on resellers
