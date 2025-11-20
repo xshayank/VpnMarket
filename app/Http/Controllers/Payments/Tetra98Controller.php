@@ -217,7 +217,7 @@ class Tetra98Controller extends Controller
         }
 
         $hashId = (string) Arr::get($payload, 'hashid');
-        $authority = (string) Arr::get($payload, 'authority');
+        $authority = (string) Arr::get($payload, 'authority', Arr::get($payload, 'Authority'));
         $statusValue = Arr::get($payload, 'status');
         $statusInt = is_numeric($statusValue) ? (int) $statusValue : (int) ((string) $statusValue === '100');
 
@@ -226,29 +226,75 @@ class Tetra98Controller extends Controller
             'hash_id' => $hashId,
             'authority' => $authority,
             'status' => $statusValue,
+            'payload_size' => strlen(json_encode($payload)),
             'http_status' => SymfonyResponse::HTTP_OK,
         ]);
 
-        if ($hashId === '') {
-            Log::warning('tetra98_callback_missing_hashid', [
-                'action' => 'tetra98_callback_missing_hashid',
+        // Check for missing authority
+        if ($authority === '') {
+            Log::warning('tetra98_callback_missing_authority', [
+                'action' => 'tetra98_callback_missing_authority',
                 'payload' => $this->sanitizePayload($payload),
             ]);
 
-            return response()->json(['message' => 'hashid missing'], SymfonyResponse::HTTP_BAD_REQUEST);
+            return response()->json(['message' => 'authority missing'], SymfonyResponse::HTTP_BAD_REQUEST);
         }
 
-        $transaction = Transaction::whereJsonContains('metadata->tetra98->hash_id', $hashId)->first();
+        // Find pending transaction by authority (primary lookup)
+        $transaction = Transaction::whereJsonContains('metadata->tetra98->authority', $authority)
+            ->where('status', Transaction::STATUS_PENDING)
+            ->first();
 
+        // Fallback: try hash_id if authority lookup fails (for backward compatibility)
+        if (! $transaction && $hashId !== '') {
+            $transaction = Transaction::whereJsonContains('metadata->tetra98->hash_id', $hashId)
+                ->where('status', Transaction::STATUS_PENDING)
+                ->first();
+        }
+
+        // Check if transaction not found OR already processed (idempotency check)
         if (! $transaction) {
-            Log::warning('tetra98_callback_transaction_not_found', [
-                'action' => 'tetra98_callback_transaction_not_found',
+            // Check if it was already completed
+            $completedTransaction = Transaction::whereJsonContains('metadata->tetra98->authority', $authority)
+                ->where('status', Transaction::STATUS_COMPLETED)
+                ->first();
+
+            if ($completedTransaction) {
+                Log::info('tetra98_callback_transaction_not_found_or_already_processed', [
+                    'action' => 'tetra98_callback_transaction_not_found_or_already_processed',
+                    'authority' => $authority,
+                    'transaction_id' => $completedTransaction->id,
+                    'reason' => 'already_completed',
+                ]);
+
+                return response('OK', 200);
+            }
+
+            Log::warning('tetra98_callback_transaction_not_found_or_already_processed', [
+                'action' => 'tetra98_callback_transaction_not_found_or_already_processed',
+                'authority' => $authority,
                 'hash_id' => $hashId,
+                'reason' => 'not_found',
             ]);
 
-            return response()->json(['message' => 'transaction not found'], SymfonyResponse::HTTP_NOT_FOUND);
+            return response('OK', 200);
         }
 
+        // Additional idempotency check: verify transaction metadata state
+        $metadata = $transaction->metadata ?? [];
+        $tetraMeta = $metadata['tetra98'] ?? [];
+        if (($tetraMeta['state'] ?? null) === 'completed') {
+            Log::info('tetra98_callback_transaction_not_found_or_already_processed', [
+                'action' => 'tetra98_callback_transaction_not_found_or_already_processed',
+                'authority' => $authority,
+                'transaction_id' => $transaction->id,
+                'reason' => 'metadata_state_completed',
+            ]);
+
+            return response('OK', 200);
+        }
+
+        // Verify payment with Tetra98
         $verifyResponse = null;
         $verifyData = null;
         $verifySuccessful = false;
@@ -260,6 +306,16 @@ class Tetra98Controller extends Controller
                 $verifyHttpStatus = $verifyResponse->status();
                 $verifyData = $verifyResponse->json();
                 $verifySuccessful = $verifyResponse->successful() && (string) Arr::get($verifyData, 'status') === '100';
+
+                Log::info('tetra98_verify_response', [
+                    'action' => 'tetra98_verify_response',
+                    'transaction_id' => $transaction->id,
+                    'authority' => $authority,
+                    'http_status' => $verifyHttpStatus,
+                    'verify_status' => Arr::get($verifyData, 'status'),
+                    'verify_successful' => $verifySuccessful,
+                    'response' => $this->sanitizePayload($verifyData),
+                ]);
             } catch (Throwable $exception) {
                 Log::error('tetra98_verify_exception', [
                     'action' => 'tetra98_verify_exception',
@@ -365,6 +421,7 @@ class Tetra98Controller extends Controller
 
             if ($depositMode === 'traffic' && $reseller instanceof Reseller) {
                 $bytes = (int) ($trafficGb * 1024 * 1024 * 1024);
+                $oldTotalBytes = $reseller->traffic_total_bytes;
                 $reseller->traffic_total_bytes += $bytes;
                 $reseller->save();
 
@@ -381,11 +438,14 @@ class Tetra98Controller extends Controller
                     'amount' => $computedAmount,
                 ]);
 
-                Log::info('traffic_topup_credited', [
-                    'action' => 'traffic_topup_credited',
+                Log::info('tetra98_traffic_purchased', [
+                    'action' => 'tetra98_traffic_purchased',
                     'reseller_id' => $reseller->id,
                     'transaction_id' => $fresh->id,
                     'traffic_gb' => $trafficGb,
+                    'added_gb' => $trafficGb,
+                    'old_total_bytes' => $oldTotalBytes,
+                    'new_total_bytes' => $reseller->traffic_total_bytes,
                     'amount_toman' => $computedAmount,
                 ]);
 
@@ -403,11 +463,20 @@ class Tetra98Controller extends Controller
                     ]);
                 }
             } else {
+                $oldBalance = null;
+                $newBalance = null;
+
                 if ($reseller instanceof Reseller && method_exists($reseller, 'isWalletBased') && $reseller->isWalletBased()) {
+                    $oldBalance = $reseller->wallet_balance;
                     $reseller->increment('wallet_balance', $fresh->amount);
+                    $reseller->refresh();
+                    $newBalance = $reseller->wallet_balance;
                     $resellerIdForReenable = $reseller->id;
                 } else {
+                    $oldBalance = $user?->balance ?? 0;
                     $user?->increment('balance', $fresh->amount);
+                    $user?->refresh();
+                    $newBalance = $user?->balance ?? 0;
                 }
 
                 $metadata['computed_amount_toman'] = $computedAmount;
@@ -421,7 +490,10 @@ class Tetra98Controller extends Controller
                     'action' => 'tetra98_wallet_credited',
                     'transaction_id' => $fresh->id,
                     'user_id' => $fresh->user_id,
+                    'reseller_id' => $reseller?->id,
                     'amount' => $fresh->amount,
+                    'old_balance' => $oldBalance,
+                    'new_balance' => $newBalance,
                     'authority' => $authority,
                 ]);
             }
@@ -434,31 +506,70 @@ class Tetra98Controller extends Controller
             if ($reseller && method_exists($reseller, 'isWalletBased') && $reseller->isWalletBased()) {
                 $reseller->refresh();
 
+                // NEW REQUIREMENT: Only reactivate if balance reaches 150,000 toman minimum
+                $reactivationThreshold = config('billing.reseller.first_topup.wallet_min', 150000);
+
                 if (method_exists($reseller, 'isSuspendedWallet') &&
                     $reseller->isSuspendedWallet() &&
-                    $reseller->wallet_balance > config('billing.wallet.suspension_threshold', -1000)) {
+                    $reseller->wallet_balance >= $reactivationThreshold) {
 
                     Log::info('tetra98_reseller_reactivation_start', [
                         'action' => 'tetra98_reseller_reactivation_start',
                         'reseller_id' => $reseller->id,
                         'user_id' => $user?->id,
                         'wallet_balance' => $reseller->wallet_balance,
+                        'reactivation_threshold' => $reactivationThreshold,
                     ]);
 
-                    $stats = $this->walletResellerReenableService->reenableWalletSuspendedConfigs($reseller);
+                    // Update reseller status to active
+                    $reseller->status = 'active';
+                    $reseller->save();
 
-                    Log::info('tetra98_reseller_reactivation_complete', [
-                        'action' => 'tetra98_reseller_reactivation_complete',
+                    Log::info('tetra98_wallet_reseller_reactivated', [
+                        'action' => 'tetra98_wallet_reseller_reactivated',
                         'reseller_id' => $reseller->id,
                         'user_id' => $user?->id,
-                        'configs_enabled' => $stats['enabled'] ?? 0,
-                        'configs_failed' => $stats['failed'] ?? 0,
+                        'wallet_balance' => $reseller->wallet_balance,
+                        'old_status' => 'suspended_wallet',
+                        'new_status' => 'active',
                     ]);
+
+                    // Re-enable wallet-suspended configs synchronously
+                    try {
+                        $stats = $this->walletResellerReenableService->reenableWalletSuspendedConfigs($reseller);
+
+                        Log::info('tetra98_wallet_configs_reenabled', [
+                            'action' => 'tetra98_wallet_configs_reenabled',
+                            'reseller_id' => $reseller->id,
+                            'user_id' => $user?->id,
+                            'configs_enabled' => $stats['enabled'] ?? 0,
+                            'configs_failed' => $stats['failed'] ?? 0,
+                        ]);
+                    } catch (Throwable $e) {
+                        Log::error('tetra98_wallet_reenable_failed', [
+                            'action' => 'tetra98_wallet_reenable_failed',
+                            'reseller_id' => $reseller->id,
+                            'user_id' => $user?->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                } else {
+                    // Log why reactivation was not triggered
+                    if ($reseller->isSuspendedWallet()) {
+                        Log::info('tetra98_reactivation_threshold_not_met', [
+                            'action' => 'tetra98_reactivation_threshold_not_met',
+                            'reseller_id' => $reseller->id,
+                            'user_id' => $user?->id,
+                            'wallet_balance' => $reseller->wallet_balance,
+                            'reactivation_threshold' => $reactivationThreshold,
+                            'shortfall' => $reactivationThreshold - $reseller->wallet_balance,
+                        ]);
+                    }
                 }
             }
         }
 
-        return response()->json(['message' => 'ok']);
+        return response('OK', 200);
     }
 
     protected function markTransactionFailed(Transaction $transaction, array $extraMeta = []): void
