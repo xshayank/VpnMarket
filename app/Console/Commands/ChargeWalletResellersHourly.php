@@ -251,7 +251,20 @@ class ChargeWalletResellersHourly extends Command
         ]);
 
         // Check if reseller should be suspended
-        $wasSuspended = $this->evaluateSuspension($reseller, $cycleStartedAt, $snapshot, $newBalance);
+        $suspensionThreshold = config('billing.wallet.suspension_threshold', -1000);
+        $wasSuspended = false;
+
+        if ($newBalance <= $suspensionThreshold && ! $reseller->isSuspendedWallet()) {
+            $this->suspendWalletReseller($reseller, $cycleStartedAt, $snapshot);
+            $wasSuspended = true;
+
+            Log::warning('wallet_reseller_suspended', [
+                'reseller_id' => $reseller->id,
+                'cycle_started_at' => $cycleStartedAt,
+                'balance' => $newBalance,
+                'threshold' => $suspensionThreshold,
+            ]);
+        }
 
         return [
             'status' => 'charged',
