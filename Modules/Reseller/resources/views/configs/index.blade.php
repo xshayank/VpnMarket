@@ -168,7 +168,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="{{ asset('vendor/qrcode.min.js') }}"></script>
     <script>
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
