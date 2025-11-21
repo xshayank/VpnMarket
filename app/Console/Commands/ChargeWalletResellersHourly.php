@@ -144,12 +144,14 @@ class ChargeWalletResellersHourly extends Command
                 'cycle_started_at' => $cycleStartedAt,
             ]);
 
+            $wasSuspended = $this->evaluateSuspension($reseller, $cycleStartedAt);
+
             return [
                 'status' => 'skipped',
                 'reason' => 'no_usage_delta',
                 'charged' => false,
                 'cost' => 0,
-                'suspended' => false,
+                'suspended' => $wasSuspended,
             ];
         }
 
@@ -161,12 +163,14 @@ class ChargeWalletResellersHourly extends Command
                 'minimum_delta_bytes' => $minimumDeltaBytes,
             ]);
 
+            $wasSuspended = $this->evaluateSuspension($reseller, $cycleStartedAt);
+
             return [
                 'status' => 'skipped',
                 'reason' => 'below_minimum_delta',
                 'charged' => false,
                 'cost' => 0,
-                'suspended' => false,
+                'suspended' => $wasSuspended,
                 'delta_bytes' => $deltaBytes,
             ];
         }
@@ -271,6 +275,30 @@ class ChargeWalletResellersHourly extends Command
             'new_balance' => $newBalance,
             'snapshot_id' => $snapshot->id,
         ];
+    }
+
+    /**
+     * Evaluate whether a wallet reseller should be suspended based on balance.
+     */
+    protected function evaluateSuspension(Reseller $reseller, string $cycleStartedAt, ?ResellerUsageSnapshot $snapshot = null, ?int $balanceOverride = null): bool
+    {
+        $balance = $balanceOverride ?? $reseller->wallet_balance;
+        $suspensionThreshold = config('billing.wallet.suspension_threshold', -1000);
+
+        if ($balance > $suspensionThreshold || $reseller->isSuspendedWallet()) {
+            return false;
+        }
+
+        $this->suspendWalletReseller($reseller, $cycleStartedAt, $snapshot);
+
+        Log::warning('wallet_reseller_suspended', [
+            'reseller_id' => $reseller->id,
+            'cycle_started_at' => $cycleStartedAt,
+            'balance' => $balance,
+            'threshold' => $suspensionThreshold,
+        ]);
+
+        return true;
     }
 
     /**
