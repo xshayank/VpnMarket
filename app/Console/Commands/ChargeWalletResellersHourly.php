@@ -8,6 +8,7 @@ use App\Models\Reseller;
 use App\Models\ResellerConfigEvent;
 use App\Models\ResellerUsageSnapshot;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ChargeWalletResellersHourly extends Command
@@ -250,7 +251,7 @@ class ChargeWalletResellersHourly extends Command
         $wasSuspended = false;
 
         if ($newBalance <= $suspensionThreshold && ! $reseller->isSuspendedWallet()) {
-            $this->suspendWalletReseller($reseller, $cycleStartedAt);
+            $this->suspendWalletReseller($reseller, $cycleStartedAt, $snapshot);
             $wasSuspended = true;
 
             Log::warning('wallet_reseller_suspended', [
@@ -275,28 +276,43 @@ class ChargeWalletResellersHourly extends Command
     /**
      * Suspend a wallet-based reseller and disable all their configs
      */
-    protected function suspendWalletReseller(Reseller $reseller, string $cycleStartedAt): void
+    protected function suspendWalletReseller(Reseller $reseller, string $cycleStartedAt, ?ResellerUsageSnapshot $snapshot = null): void
     {
-        // Update reseller status
-        $reseller->update(['status' => 'suspended_wallet']);
+        $cycleMarker = $snapshot->meta['cycle_started_at'] ?? $cycleStartedAt ?? now()->startOfMinute()->toIso8601String();
 
-        // Create audit log for suspension
-        AuditLog::log(
-            action: 'reseller_suspended_wallet',
-            targetType: 'reseller',
-            targetId: $reseller->id,
-            reason: 'wallet_balance_exhausted',
-            meta: [
-                'wallet_balance' => $reseller->wallet_balance,
-                'suspension_threshold' => config('billing.wallet.suspension_threshold', -1000),
-                'cycle_started_at' => $cycleStartedAt,
-            ],
-            actorType: null,
-            actorId: null  // System action
-        );
+        DB::transaction(function () use ($reseller, $cycleMarker) {
+            $reseller->update(['status' => 'suspended_wallet']);
+
+            // Create audit log for suspension
+            AuditLog::log(
+                action: 'reseller_suspended_wallet',
+                targetType: 'reseller',
+                targetId: $reseller->id,
+                reason: 'wallet_balance_exhausted',
+                meta: [
+                    'wallet_balance' => $reseller->wallet_balance,
+                    'suspension_threshold' => config('billing.wallet.suspension_threshold', -1000),
+                    'cycle_started_at' => $cycleMarker,
+                ],
+                actorType: null,
+                actorId: null  // System action
+            );
+        });
+
+        Log::warning('wallet_reseller_suspended_charge', [
+            'reseller_id' => $reseller->id,
+            'cycle_started_at' => $cycleMarker,
+            'wallet_balance' => $reseller->wallet_balance,
+        ]);
 
         // Disable all active configs
-        $this->disableResellerConfigs($reseller, $cycleStartedAt);
+        $disabledCount = $this->disableResellerConfigs($reseller, $cycleMarker);
+
+        Log::info('wallet_disable_configs_count', [
+            'reseller_id' => $reseller->id,
+            'cycle_started_at' => $cycleMarker,
+            'disabled_count' => $disabledCount,
+        ]);
 
         $this->warn("Suspended reseller {$reseller->id} (balance: {$reseller->wallet_balance} تومان)");
     }
@@ -304,12 +320,12 @@ class ChargeWalletResellersHourly extends Command
     /**
      * Disable all active configs for a reseller
      */
-    protected function disableResellerConfigs(Reseller $reseller, string $cycleStartedAt): void
+    protected function disableResellerConfigs(Reseller $reseller, string $cycleStartedAt): int
     {
         $configs = $reseller->configs()->where('status', 'active')->get();
 
         if ($configs->isEmpty()) {
-            return;
+            return 0;
         }
 
         Log::info("Disabling {$configs->count()} configs for suspended wallet reseller {$reseller->id}");
@@ -391,5 +407,7 @@ class ChargeWalletResellersHourly extends Command
         }
 
         Log::info("Disabled {$disabledCount} configs for wallet reseller {$reseller->id}");
+
+        return $disabledCount;
     }
 }
