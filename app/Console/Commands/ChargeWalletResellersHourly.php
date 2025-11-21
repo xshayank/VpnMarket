@@ -8,7 +8,6 @@ use App\Models\Reseller;
 use App\Models\ResellerConfigEvent;
 use App\Models\ResellerUsageSnapshot;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ChargeWalletResellersHourly extends Command
@@ -36,7 +35,6 @@ class ChargeWalletResellersHourly extends Command
         if (! config('billing.wallet.charge_enabled', true)) {
             $this->info('Wallet charging is disabled via config');
             Log::info('Wallet charging skipped: disabled via WALLET_CHARGE_ENABLED');
-
             return Command::SUCCESS;
         }
 
@@ -229,30 +227,11 @@ class ChargeWalletResellersHourly extends Command
             ],
         ]);
 
-        // Deduct from wallet balance and check suspension in a transaction
+        // Deduct from wallet balance
         $oldBalance = $reseller->wallet_balance;
         $newBalance = $oldBalance - $cost;
-        $wasSuspended = false;
 
-        DB::transaction(function () use ($reseller, $newBalance, $cycleStartedAt, &$wasSuspended) {
-            // Update wallet balance
-            $reseller->update(['wallet_balance' => $newBalance]);
-
-            // Check if reseller should be suspended
-            $suspensionThreshold = config('billing.wallet.suspension_threshold', -1000);
-
-            if ($newBalance <= $suspensionThreshold && ! $reseller->isSuspendedWallet()) {
-                $this->suspendWalletReseller($reseller, $cycleStartedAt);
-                $wasSuspended = true;
-
-                Log::warning('wallet_reseller_suspended_charge', [
-                    'reseller_id' => $reseller->id,
-                    'cycle_started_at' => $cycleStartedAt,
-                    'balance' => $newBalance,
-                    'threshold' => $suspensionThreshold,
-                ]);
-            }
-        });
+        $reseller->update(['wallet_balance' => $newBalance]);
 
         Log::info('wallet_charge_applied', [
             'reseller_id' => $reseller->id,
@@ -264,8 +243,23 @@ class ChargeWalletResellersHourly extends Command
             'cost' => $cost,
             'old_balance' => $oldBalance,
             'new_balance' => $newBalance,
-            'suspended' => $wasSuspended,
         ]);
+
+        // Check if reseller should be suspended
+        $suspensionThreshold = config('billing.wallet.suspension_threshold', -1000);
+        $wasSuspended = false;
+
+        if ($newBalance <= $suspensionThreshold && ! $reseller->isSuspendedWallet()) {
+            $this->suspendWalletReseller($reseller, $cycleStartedAt);
+            $wasSuspended = true;
+
+            Log::warning('wallet_reseller_suspended', [
+                'reseller_id' => $reseller->id,
+                'cycle_started_at' => $cycleStartedAt,
+                'balance' => $newBalance,
+                'threshold' => $suspensionThreshold,
+            ]);
+        }
 
         return [
             'status' => 'charged',
@@ -333,7 +327,6 @@ class ChargeWalletResellersHourly extends Command
                 if (isset($meta['disabled_by_wallet_suspension_cycle_at']) &&
                     $meta['disabled_by_wallet_suspension_cycle_at'] === $cycleStartedAt) {
                     Log::info("Config {$config->id} already disabled in this cycle, skipping");
-
                     continue;
                 }
 
@@ -397,11 +390,6 @@ class ChargeWalletResellersHourly extends Command
             }
         }
 
-        Log::info('wallet_disable_configs_count', [
-            'reseller_id' => $reseller->id,
-            'cycle_started_at' => $cycleStartedAt,
-            'disabled_count' => $disabledCount,
-            'total_configs' => $configs->count(),
-        ]);
+        Log::info("Disabled {$disabledCount} configs for wallet reseller {$reseller->id}");
     }
 }
