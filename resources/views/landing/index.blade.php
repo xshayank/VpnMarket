@@ -141,7 +141,12 @@
     <section class="section" id="panels">
         <div class="section-header">
             <h2>پنل‌های پشتیبانی‌شده</h2>
-            <p class="lead">هر دو پروتکل OpenVPN و V2Ray در یک پلتفرم یکپارچه؛ میزبانی شده روی زیرساخت پایدار ما.</p>
+            <p class="lead">همه پنل‌ها داخل یک داشبورد و یک حساب مشترک هستند؛ می‌توانید هم‌زمان روی مرزنشین (V2Ray) و ایلاندو (OpenVPN) کانفیگ بسازید.</p>
+        </div>
+        <div class="glass card" style="margin-bottom: 16px;">
+            <p class="muted" style="margin: 0;">
+                حساب شما یکی است و هر دو پنل مرزنشین (V2Ray) و ایلاندو (OpenVPN) داخل همان داشبورد قرار دارند. می‌توانید برای هر مشتری یا سناریو، کانفیگ را در هر دو پنل ایجاد و مدیریت کنید و لازم نیست بین پنل‌های جداگانه جابه‌جا شوید.
+            </p>
         </div>
         <div class="grid panels-grid">
             @foreach($panels as $panel)
@@ -154,8 +159,8 @@
                 <div class="card glass">
                     <div class="panel-tag">{{ ucfirst($panel->panel_type) }}</div>
                     <h3 style="margin: 8px 0 6px;">{{ $panel->name }}</h3>
-                    <p class="muted">اتصال امن و پایدار با مدیریت ساده. انتخاب این پنل را در هنگام ثبت‌نام پیش‌فرض می‌کنیم.</p>
-                    <a class="btn btn-secondary" href="{{ $panelLink }}" aria-label="ثبت‌نام برای {{ $panel->name }}">انتخاب این پنل</a>
+                    <p class="muted">هر کدام از این پنل‌ها داخل یک حساب واحد در دسترس است؛ می‌توانید هم‌زمان روی مرزنشین (V2Ray) و ایلاندو (OpenVPN) کانفیگ بسازید و بین آن‌ها سوییچ کنید.</p>
+                    <a class="btn btn-secondary" href="{{ $panelLink }}" aria-label="ثبت‌نام برای {{ $panel->name }}">ثبت‌نام و دسترسی به همه پنل‌ها</a>
                 </div>
             @endforeach
         </div>
