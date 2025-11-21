@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Spatie\Permission\Models\Role;
 
 class RegisteredUserController extends Controller
 {
@@ -145,6 +146,18 @@ class RegisteredUserController extends Controller
                     ]);
                 }
             }
+
+            $resellerRole = Role::where('name', 'reseller')->where('guard_name', 'web')->first();
+            if (!$resellerRole) {
+                throw new \RuntimeException('Reseller role is not configured. Please run the RBAC seeder.');
+            }
+
+            $user->assignRole($resellerRole);
+
+            Log::info('role_assigned', [
+                'user_id' => $user->id,
+                'role' => $resellerRole->name,
+            ]);
 
             event(new Registered($user));
 
