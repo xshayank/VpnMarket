@@ -233,7 +233,7 @@ class ChargeWalletResellersHourly extends Command
         $newBalance = $oldBalance - $cost;
         $wasSuspended = false;
 
-        \DB::transaction(function () use ($reseller, $newBalance, $cycleStartedAt, &$wasSuspended) {
+        DB::transaction(function () use ($reseller, $newBalance, $cycleStartedAt, &$wasSuspended) {
             // Update wallet balance
             $reseller->update(['wallet_balance' => $newBalance]);
 
