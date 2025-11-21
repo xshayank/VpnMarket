@@ -101,7 +101,8 @@
 
                     <div class="mb-4 md:mb-6">
                         <label class="block text-xs md:text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">انتخاب پنل</label>
-                        <select name="panel_id" x-model="selectedPanelId" required class="w-full h-12 md:h-10 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm md:text-base">
+                        <select name="panel_id" x-model="selectedPanelId" required dir="rtl"
+                            class="w-full h-12 md:h-10 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm md:text-base text-right pr-10 md:pr-8">
                             <option value="">-- انتخاب کنید --</option>
                             @foreach ($panels as $panel)
                                 <option value="{{ $panel->id }}">{{ $panel->name }} ({{ $panel->panel_type }})</option>
