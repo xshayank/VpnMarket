@@ -16,10 +16,11 @@
     <!-- Powered by VPNMarket CMS | v1.0 -->
 
     <div class="min-h-screen bg-gray-100 dark:bg-gray-900">
-            @include('layouts.navigation')
-            
-            {{-- Reseller Navigation --}}
-            @include('partials.reseller-nav')
+            @if(auth()->check() && auth()->user()->reseller)
+                @include('partials.reseller-nav')
+            @else
+                @include('layouts.navigation')
+            @endif
 
             <!-- Page Heading -->
             @isset($header)
