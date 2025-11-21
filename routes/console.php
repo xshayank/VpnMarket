@@ -67,7 +67,11 @@ if (env('SCHEDULE_ENFORCE_RESELLER_WINDOWS', true)) {
 if (config('billing.wallet.charge_enabled', true)) {
     Schedule::command('reseller:charge-wallet-hourly')
         ->everyMinute()
-        ->withoutOverlapping()
+        // Limit the overlap mutex TTL so a killed/failed run doesn't block the scheduler
+        // for 24 hours (the default). Ten minutes keeps retries frequent while avoiding
+        // concurrent executions.
+        ->withoutOverlapping(10)
+        ->evenInMaintenanceMode()
         ->onOneServer()
         ->runInBackground();
 }
