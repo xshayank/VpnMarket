@@ -23,7 +23,7 @@ class ReenableResellerConfigsJob implements ShouldQueue
 
     public $timeout = 600;
 
-    public ?int $resellerId = null;
+    public ?int $resellerId;
 
     /**
      * Create a new job instance.
