@@ -8,46 +8,8 @@
     <title>{{ config('app.name', 'Laravel') }} - ورود</title>
 
     <link rel="stylesheet" href="{{ asset('themes/auth/modern/style.css') }}">
-    <style>
-        /* Floating particles */
-        .particle {
-            position: absolute;
-            width: 4px;
-            height: 4px;
-            background: var(--particle-color-1);
-            border-radius: 50%;
-            pointer-events: none;
-            opacity: 0;
-        }
-        
-        .particle:nth-child(2n) { background: var(--particle-color-2); }
-        .particle:nth-child(3n) { background: var(--particle-color-3); }
-        
-        .particle:nth-child(1) { left: 10%; animation: float 8s ease-in-out infinite; animation-delay: 0s; }
-        .particle:nth-child(2) { left: 20%; animation: floatReverse 10s ease-in-out infinite; animation-delay: 1s; }
-        .particle:nth-child(3) { left: 30%; animation: float 12s ease-in-out infinite; animation-delay: 2s; }
-        .particle:nth-child(4) { left: 40%; animation: floatReverse 9s ease-in-out infinite; animation-delay: 1.5s; }
-        .particle:nth-child(5) { left: 50%; animation: float 11s ease-in-out infinite; animation-delay: 0.5s; }
-        .particle:nth-child(6) { left: 60%; animation: floatReverse 13s ease-in-out infinite; animation-delay: 2.5s; }
-        .particle:nth-child(7) { left: 70%; animation: float 10s ease-in-out infinite; animation-delay: 1s; }
-        .particle:nth-child(8) { left: 80%; animation: floatReverse 14s ease-in-out infinite; animation-delay: 3s; }
-        .particle:nth-child(9) { left: 90%; animation: float 9s ease-in-out infinite; animation-delay: 0.8s; }
-        .particle:nth-child(10) { left: 15%; animation: floatReverse 11s ease-in-out infinite; animation-delay: 2s; }
-    </style>
 </head>
 <body class="modern-auth-body">
-
-<!-- Floating particles -->
-<div class="particle"></div>
-<div class="particle"></div>
-<div class="particle"></div>
-<div class="particle"></div>
-<div class="particle"></div>
-<div class="particle"></div>
-<div class="particle"></div>
-<div class="particle"></div>
-<div class="particle"></div>
-<div class="particle"></div>
 
 <div class="auth-card">
 
