@@ -36,6 +36,7 @@ class ChargeWalletResellersHourly extends Command
         if (! config('billing.wallet.charge_enabled', true)) {
             $this->info('Wallet charging is disabled via config');
             Log::info('Wallet charging skipped: disabled via WALLET_CHARGE_ENABLED');
+
             return Command::SUCCESS;
         }
 
@@ -332,6 +333,7 @@ class ChargeWalletResellersHourly extends Command
                 if (isset($meta['disabled_by_wallet_suspension_cycle_at']) &&
                     $meta['disabled_by_wallet_suspension_cycle_at'] === $cycleStartedAt) {
                     Log::info("Config {$config->id} already disabled in this cycle, skipping");
+
                     continue;
                 }
 
