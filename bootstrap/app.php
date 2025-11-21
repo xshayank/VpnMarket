@@ -11,8 +11,6 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    // Ensure all console commands (including wallet charging) are registered for scheduler/Artisan usage
-    ->withCommands(__DIR__.'/../app/Console/Commands')
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
