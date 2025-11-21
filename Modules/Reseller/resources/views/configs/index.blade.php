@@ -168,7 +168,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script>
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
@@ -179,9 +178,15 @@
         }
 
         function showQRCode(url) {
+            if (!window.QRCode) {
+                console.error('QRCode library is not available');
+                alert('امکان نمایش QR کد وجود ندارد. لطفا صفحه را مجددا بارگذاری کنید.');
+                return;
+            }
+
             const container = document.getElementById('qrCodeContainer');
             container.innerHTML = '';
-            
+
             new QRCode(container, {
                 text: url,
                 width: 256,
