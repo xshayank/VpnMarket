@@ -2,9 +2,10 @@
     @if(Auth::user() && Auth::user()->reseller)
         <div class="bg-gradient-to-r from-gray-800 to-gray-900 dark:from-gray-900 dark:to-black border-b border-gray-700">
             <div class="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
-                <nav class="flex items-center justify-start space-x-1 space-x-reverse py-2 md:py-3 overflow-x-auto scrollbar-hide">
+                <nav class="flex items-center justify-between gap-3 py-2 md:py-3">
+                    <div class="flex items-center flex-1 space-x-1 space-x-reverse overflow-x-auto scrollbar-hide">
                     {{-- Reseller Dashboard --}}
-                    <a href="{{ route('reseller.dashboard') }}" 
+                    <a href="{{ route('reseller.dashboard') }}"
                        class="flex items-center px-2 md:px-3 py-2 text-xs md:text-sm font-medium rounded-lg transition-colors duration-150 whitespace-nowrap
                               {{ request()->routeIs('reseller.dashboard') 
                                   ? 'bg-gray-700 text-white' 
@@ -14,7 +15,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                                   d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
                         </svg>
-                        <span>داشبورد</span>
+                           <span>داشبورد</span>
                     </a>
 
                     @if(Auth::user()->reseller && method_exists(Auth::user()->reseller, 'isPlanBased') && Auth::user()->reseller->isPlanBased())
@@ -88,6 +89,38 @@
                             <span>تیکت‌ها</span>
                         </a>
                     @endif
+                    </div>
+
+                    <div class="flex items-center flex-shrink-0 text-gray-100 space-x-2 space-x-reverse">
+                        <span class="hidden sm:block text-sm md:text-base font-medium">{{ Auth::user()->name }}</span>
+                        <x-dropdown align="left" width="48" :contentClasses="'py-1 bg-white dark:bg-gray-800 text-right'">
+                            <x-slot name="trigger">
+                                <button class="inline-flex items-center px-2 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-100 bg-gray-800 hover:bg-gray-700 focus:outline-none transition ease-in-out duration-150">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A9 9 0 1118.88 6.196 9 9 0 015.12 17.804z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    <svg class="ms-1 w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </x-slot>
+
+                            <x-slot name="content">
+                                <x-dropdown-link :href="route('profile.edit')">
+                                    پروفایل
+                                </x-dropdown-link>
+
+                                <form method="POST" action="{{ route('logout') }}">
+                                    @csrf
+                                    <x-dropdown-link :href="route('logout')"
+                                                     onclick="event.preventDefault(); this.closest('form').submit();">
+                                        خروج از حساب
+                                    </x-dropdown-link>
+                                </form>
+                            </x-slot>
+                        </x-dropdown>
+                    </div>
                 </nav>
             </div>
         </div>
