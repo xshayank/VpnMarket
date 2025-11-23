@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\PaymentGatewayTransaction;
+use App\Models\Reseller;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -30,6 +31,23 @@ class StarsefarControllerTest extends TestCase
         ]);
 
         $response->assertForbidden();
+    }
+
+    public function test_wallet_charge_page_allows_selecting_enabled_gateway(): void
+    {
+        $this->enableGateway();
+
+        $user = User::factory()->create();
+        Reseller::factory()->walletBased()->create(['user_id' => $user->id]);
+
+        $response = $this->actingAs($user)->get(route('wallet.charge.form'));
+
+        $response
+            ->assertOk()
+            ->assertDontSee('درگاه استارز در حال حاضر غیر فعال است.', false)
+            ->assertSee('"availableMethods"', false)
+            ->assertSee('"starsefarEnabled":true', false)
+            ->assertSee("selectMethod('starsefar')", false);
     }
 
     public function test_initiate_creates_transaction_and_returns_link(): void

@@ -112,9 +112,9 @@ class OrderController extends Controller
         }
 
         $settings = Setting::all()->pluck('value', 'key');
+        $starsefarEnabled = StarsefarConfig::isEnabled();
         $availableMethods = PaymentMethodConfig::availableWalletChargeMethods();
         $cardToCardEnabled = in_array('card', $availableMethods, true);
-        $starsefarEnabled = in_array('starsefar', $availableMethods, true);
         $tetraEnabled = in_array('tetra98', $availableMethods, true);
 
         $cardDetails = [
@@ -162,6 +162,7 @@ class OrderController extends Controller
             'isResellerWallet' => $reseller->isWalletBased(),
             'cardDetails' => $cardDetails,
             'starsefarSettings' => $starsefarSettings,
+            'starsefarEnabled' => $starsefarEnabled,
             'cardToCardEnabled' => $cardToCardEnabled,
             'tetraSettings' => $tetraSettings,
             'availableMethods' => $availableMethods,

@@ -46,7 +46,7 @@
                         id="starsefar-amount"
                         type="number"
                         min="{{ (int) $starsefarSettings['min_amount'] }}"
-                        x-model="starAmount"
+                        x-model.number="starAmount"
                         class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-blue-200 dark:border-blue-500 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                         placeholder="حداقل {{ number_format($starsefarSettings['min_amount']) }}"
                         required
