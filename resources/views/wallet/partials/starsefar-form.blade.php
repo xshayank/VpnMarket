@@ -46,7 +46,7 @@
                         id="starsefar-amount"
                         type="number"
                         min="{{ (int) $starsefarSettings['min_amount'] }}"
-                        x-model="starAmount"
+                        x-model.number="starAmount"
                         class="block mt-1 w-full p-4 text-lg text-center font-bold bg-transparent dark:bg-gray-700/50 border-2 border-blue-200 dark:border-blue-500 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                         placeholder="حداقل {{ number_format($starsefarSettings['min_amount']) }}"
                         required
@@ -76,8 +76,8 @@
                 type="submit"
                 class="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg shadow-lg hover:scale-105 transform transition-transform duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
                 :disabled="isInitiating || (($chargeMode ?? 'wallet') === 'wallet'
-                    ? (!starAmount || Number(starAmount) < config.starsefarMinAmount)
-                    : (!trafficGb || Number(trafficGb) < (config.minAmountGb || 0) || trafficAmountToman() < config.starsefarMinAmount))"
+                    ? isStarAmountInvalid()
+                    : (!trafficGb || toNumber(trafficGb) < (config.minAmountGb || 0) || trafficAmountToman() < config.starsefarMinAmount))"
             >
                 <svg
                     x-show="!isInitiating"

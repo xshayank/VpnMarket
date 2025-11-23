@@ -328,9 +328,39 @@
                 renderErrorMessage: '',
                 lastRenderErrorReason: null,
                 lastSuccessfulMethod: null,
+                normalizeDigits(value) {
+                    if (typeof value !== 'string') {
+                        return value ?? '';
+                    }
+
+                    const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+                    const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+
+                    return value
+                        .replace(/[۰-۹]/g, (digit) => persianDigits.indexOf(digit))
+                        .replace(/[٠-٩]/g, (digit) => arabicDigits.indexOf(digit));
+                },
+                toNumber(value) {
+                    const normalized = this.normalizeDigits(value);
+                    const numeric = Number(normalized);
+
+                    return Number.isFinite(numeric) ? numeric : NaN;
+                },
+                clampStarAmount() {
+                    const min = Number(config.starsefarMinAmount) || 0;
+                    const numeric = this.toNumber(this.starAmount);
+
+                    this.starAmount = Number.isFinite(numeric) ? Math.max(numeric, min) : min;
+                },
+                isStarAmountInvalid() {
+                    const min = Number(config.starsefarMinAmount) || 0;
+                    const numeric = this.toNumber(this.starAmount);
+
+                    return !Number.isFinite(numeric) || numeric < min;
+                },
                 init() {
                     this.method = this.resolveInitialMethod(config.defaultMethod);
-                    
+
                     // Set default amounts based on mode
                     if (this.chargeMode === 'wallet') {
                         if (this.cardAmount === null || this.cardAmount === '') {
@@ -341,9 +371,9 @@
                             this.trafficGb = config.minAmountGb || 50;
                         }
                     }
-                    
-                    if (!this.starAmount && config.starsefarMinAmount) {
-                        this.starAmount = config.starsefarMinAmount;
+
+                    if (config.starsefarMinAmount) {
+                        this.clampStarAmount();
                     }
                     if (this.starPhone === null) {
                         this.starPhone = '';
@@ -407,8 +437,8 @@
                     this.logMethodEvent('method_selected', method);
                     if (method !== 'starsefar') {
                         this.clearStarsefarFeedback();
-                    } else if (!this.starAmount || Number(this.starAmount) < config.starsefarMinAmount) {
-                        this.starAmount = config.starsefarMinAmount;
+                    } else {
+                        this.clampStarAmount();
                     }
                     if (method === 'tetra98' && (!this.tetraAmount || Number(this.tetraAmount) < config.tetraMinAmount)) {
                         this.tetraAmount = config.tetraMinAmount;
@@ -430,7 +460,8 @@
                     this.method = fallback;
                 },
                 trafficAmountToman() {
-                    const gb = Number(this.trafficGb) || 0;
+                    const parsedGb = this.toNumber(this.trafficGb);
+                    const gb = Number.isFinite(parsedGb) ? parsedGb : 0;
                     const rate = Number(config.trafficPricePerGb) || 0;
 
                     return Math.max(0, Math.round(gb * rate));
