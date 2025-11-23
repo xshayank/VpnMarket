@@ -435,6 +435,19 @@
 
                     return Math.max(0, Math.round(gb * rate));
                 },
+                starsefarRequirementNotMet() {
+                    const minAmount = Number(config.starsefarMinAmount || 0);
+
+                    if (this.chargeMode === 'wallet') {
+                        return !this.starAmount || Number(this.starAmount) < minAmount;
+                    }
+
+                    const minTrafficGb = Number(config.minAmountGb || 0);
+                    const belowTrafficRequirement = !this.trafficGb || Number(this.trafficGb) < minTrafficGb;
+                    const belowPaymentRequirement = this.trafficAmountToman() < minAmount;
+
+                    return belowTrafficRequirement || belowPaymentRequirement;
+                },
                 handleRenderError(reason, method = null) {
                     if (this.lastRenderErrorReason === reason && this.renderErrorMessage) {
                         return;
