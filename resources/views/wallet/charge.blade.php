@@ -12,6 +12,7 @@
     @php
         $cardToCardEnabled = $cardToCardEnabled ?? true;
         $availableMethods = $availableMethods ?? [];
+        $starsefarEnabled = $starsefarEnabled ?? ($starsefarSettings['enabled'] ?? false);
         $tetraSettings = $tetraSettings ?? ['enabled' => false, 'min_amount' => 10000];
         $methodCount = count($availableMethods);
         $tetraMinAmount = (int) ($tetraSettings['min_amount'] ?? 10000);
@@ -21,7 +22,7 @@
         $defaultMethod = $defaultMethod
             ?? ($cardToCardEnabled
                 ? 'card'
-                : (($starsefarSettings['enabled'] ?? false)
+                : ($starsefarEnabled
                     ? 'starsefar'
                     : (($tetraSettings['enabled'] ?? false) ? 'tetra98' : null)));
     @endphp
@@ -38,7 +39,7 @@
                         'minAmountGb' => $minAmountGb ?? 50,
                         'trafficPricePerGb' => $trafficPricePerGb ?? 750,
                         'starsefarMinAmount' => (int) ($starsefarSettings['min_amount'] ?? 25000),
-                        'starsefarEnabled' => (bool) ($starsefarSettings['enabled'] ?? false),
+                        'starsefarEnabled' => (bool) $starsefarEnabled,
                         'cardEnabled' => (bool) $cardToCardEnabled,
                         'tetraEnabled' => (bool) ($tetraSettings['enabled'] ?? false),
                         'tetraMinAmount' => $tetraMinAmount,
@@ -105,7 +106,7 @@
                                     </button>
                                 @endif
 
-                                @if($starsefarSettings['enabled'])
+                                @if($starsefarEnabled)
                                     <button
                                         type="button"
                                         @click="selectMethod('starsefar')"
@@ -284,7 +285,7 @@
                     @endif
 
                     {{-- درگاه استارز --}}
-                    @if($starsefarSettings['enabled'])
+                    @if($starsefarEnabled)
                         @include('wallet.partials.starsefar-form', ['starsefarSettings' => $starsefarSettings])
                     @else
                         <div x-show="method === 'starsefar'" class="bg-amber-100 border border-amber-300 text-amber-700 rounded-xl p-4" x-cloak>
