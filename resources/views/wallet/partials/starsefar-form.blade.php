@@ -75,9 +75,7 @@
             <button
                 type="submit"
                 class="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg shadow-lg hover:scale-105 transform transition-transform duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
-                :disabled="isInitiating || (($chargeMode ?? 'wallet') === 'wallet'
-                    ? isStarAmountInvalid()
-                    : (!trafficGb || toNumber(trafficGb) < (config.minAmountGb || 0) || trafficAmountToman() < config.starsefarMinAmount))"
+                :disabled="isInitiating || starsefarRequirementNotMet()"
             >
                 <svg
                     x-show="!isInitiating"
@@ -99,6 +97,16 @@
                 </svg>
                 <span x-text="isInitiating ? 'در حال ساخت لینک...' : 'ساخت لینک پرداخت'">ساخت لینک پرداخت</span>
             </button>
+
+            <div
+                x-show="starsefarRequirementNotMet()"
+                x-transition.opacity
+                x-cloak
+                class="mt-2 text-xs text-amber-800 dark:text-amber-100 bg-amber-50 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-lg p-3 text-center"
+            >
+                حداقل پرداخت برای استفاده از استارز {{ number_format($starsefarSettings['min_amount']) }} تومان است.
+                برای خرید ترافیک نیز مبلغ نهایی باید حداقل به همین میزان برسد.
+            </div>
         </div>
     </form>
 </div>
