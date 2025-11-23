@@ -45,7 +45,9 @@ class StarsefarWalletReactivationTest extends TestCase
             'status' => PaymentGatewayTransaction::STATUS_PENDING,
         ]);
 
-        $response = $this->postJson(route('webhooks.starsefar'), [
+        $response = $this->withHeaders([
+            'Origin' => 'https://starsefar.xyz',
+        ])->postJson(route('webhooks.starsefar'), [
             'success' => true,
             'orderId' => 'gift_wallet_reseller',
             'status' => 'completed',
@@ -93,7 +95,9 @@ class StarsefarWalletReactivationTest extends TestCase
             'status' => PaymentGatewayTransaction::STATUS_PENDING,
         ]);
 
-        $response = $this->postJson(route('webhooks.starsefar'), [
+        $response = $this->withHeaders([
+            'Origin' => 'https://starsefar.xyz',
+        ])->postJson(route('webhooks.starsefar'), [
             'success' => true,
             'orderId' => 'gift_reactivate',
             'status' => 'completed',
@@ -126,7 +130,9 @@ class StarsefarWalletReactivationTest extends TestCase
             'status' => PaymentGatewayTransaction::STATUS_PENDING,
         ]);
 
-        $response = $this->postJson(route('webhooks.starsefar'), [
+        $response = $this->withHeaders([
+            'Origin' => 'https://starsefar.xyz',
+        ])->postJson(route('webhooks.starsefar'), [
             'success' => true,
             'orderId' => 'gift_still_suspended',
             'status' => 'completed',
@@ -165,7 +171,9 @@ class StarsefarWalletReactivationTest extends TestCase
         ]);
 
         // First webhook call
-        $response1 = $this->postJson(route('webhooks.starsefar'), [
+        $response1 = $this->withHeaders([
+            'Origin' => 'https://starsefar.xyz',
+        ])->postJson(route('webhooks.starsefar'), [
             'success' => true,
             'orderId' => 'gift_idempotent',
             'status' => 'completed',
@@ -177,7 +185,9 @@ class StarsefarWalletReactivationTest extends TestCase
         $this->assertEquals(10000, $balanceAfterFirst);
 
         // Second webhook call (duplicate)
-        $response2 = $this->postJson(route('webhooks.starsefar'), [
+        $response2 = $this->withHeaders([
+            'Origin' => 'https://starsefar.xyz',
+        ])->postJson(route('webhooks.starsefar'), [
             'success' => true,
             'orderId' => 'gift_idempotent',
             'status' => 'completed',
@@ -212,7 +222,9 @@ class StarsefarWalletReactivationTest extends TestCase
             'status' => PaymentGatewayTransaction::STATUS_PENDING,
         ]);
 
-        $response = $this->postJson(route('webhooks.starsefar'), [
+        $response = $this->withHeaders([
+            'Origin' => 'https://starsefar.xyz',
+        ])->postJson(route('webhooks.starsefar'), [
             'success' => true,
             'orderId' => 'gift_normal_user',
             'status' => 'completed',

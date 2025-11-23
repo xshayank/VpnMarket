@@ -195,6 +195,10 @@ class StarsefarController extends Controller
 
     public function webhook(Request $request)
     {
+        if ($this->isUntrustedCallback($request)) {
+            return redirect('/reseller');
+        }
+
         $payload = $request->all();
         $orderId = $payload['orderId'] ?? null;
 
@@ -222,6 +226,58 @@ class StarsefarController extends Controller
     protected function makeClient(): StarsEfarClient
     {
         return new StarsEfarClient(StarsefarConfig::getBaseUrl(), StarsefarConfig::getApiKey());
+    }
+
+    protected function isUntrustedCallback(Request $request): bool
+    {
+        $trustedHost = StarsefarConfig::getTrustedHost();
+        $originHost = $this->extractHost($request->header('Origin'));
+        $refererHost = $this->extractHost($request->header('Referer'));
+
+        if ($originHost && ! $this->hostsMatch($originHost, $trustedHost)) {
+            Log::warning('StarsEfar webhook blocked due to origin mismatch', [
+                'origin' => $originHost,
+                'trusted_host' => $trustedHost,
+                'ip' => $request->ip(),
+            ]);
+
+            return true;
+        }
+
+        if ($refererHost && ! $this->hostsMatch($refererHost, $trustedHost)) {
+            Log::warning('StarsEfar webhook blocked due to referer mismatch', [
+                'referer' => $refererHost,
+                'trusted_host' => $trustedHost,
+                'ip' => $request->ip(),
+            ]);
+
+            return true;
+        }
+
+        if (! $originHost && ! $refererHost) {
+            Log::warning('StarsEfar webhook missing origin and referer', [
+                'trusted_host' => $trustedHost,
+                'ip' => $request->ip(),
+            ]);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function extractHost(?string $value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        return parse_url($value, PHP_URL_HOST) ?: null;
+    }
+
+    protected function hostsMatch(string $host, string $trustedHost): bool
+    {
+        return mb_strtolower($host) === mb_strtolower($trustedHost);
     }
 
     protected function markTransactionPaid(PaymentGatewayTransaction $transaction, array $payload = []): void

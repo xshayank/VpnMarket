@@ -129,7 +129,9 @@ class StarsefarControllerTest extends TestCase
             'status' => PaymentGatewayTransaction::STATUS_PENDING,
         ]);
 
-        $response = $this->postJson(route('webhooks.starsefar'), [
+        $response = $this->withHeaders([
+            'Origin' => 'https://starsefar.xyz',
+        ])->postJson(route('webhooks.starsefar'), [
             'success' => true,
             'orderId' => 'gift_webhook',
             'status' => 'completed',
@@ -143,5 +145,35 @@ class StarsefarControllerTest extends TestCase
         ]);
 
         $this->assertEquals(70000, $user->fresh()->balance);
+    }
+
+    public function test_webhook_blocks_untrusted_origin(): void
+    {
+        $this->enableGateway();
+
+        $user = User::factory()->create(['balance' => 0]);
+
+        $transaction = PaymentGatewayTransaction::create([
+            'provider' => 'starsefar',
+            'order_id' => 'gift_untrusted',
+            'user_id' => $user->id,
+            'amount_toman' => 12000,
+            'status' => PaymentGatewayTransaction::STATUS_PENDING,
+        ]);
+
+        $response = $this->withHeaders([
+            'Origin' => 'https://attacker.test',
+        ])->postJson(route('webhooks.starsefar'), [
+            'success' => true,
+            'orderId' => 'gift_untrusted',
+            'status' => 'completed',
+        ]);
+
+        $response->assertRedirect('/reseller');
+
+        $this->assertDatabaseHas('payment_gateway_transactions', [
+            'id' => $transaction->id,
+            'status' => PaymentGatewayTransaction::STATUS_PENDING,
+        ]);
     }
 }
