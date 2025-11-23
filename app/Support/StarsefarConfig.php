@@ -52,6 +52,21 @@ class StarsefarConfig
 
     public static function getMinAmountToman(): int
     {
-        return (int) config('starsefar.min_amount_toman', 25000);
+        $default = (int) config('starsefar.min_amount_toman', 25000);
+
+        $value = self::getSetting('starsefar_min_amount_toman');
+
+        if ($value !== null) {
+            return (int) $value;
+        }
+
+        return $default;
+    }
+
+    public static function getTrustedHost(): string
+    {
+        $host = parse_url(self::getBaseUrl(), PHP_URL_HOST);
+
+        return $host ?: 'starsefar.xyz';
     }
 }
