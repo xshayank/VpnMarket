@@ -41,6 +41,7 @@ class Reseller extends Model
         'meta',
         'wallet_balance',
         'wallet_price_per_gb',
+        'api_enabled',
     ];
 
     protected $casts = [
@@ -57,6 +58,7 @@ class Reseller extends Model
         'meta' => 'array',
         'wallet_balance' => 'integer',
         'wallet_price_per_gb' => 'integer',
+        'api_enabled' => 'boolean',
     ];
 
     /**

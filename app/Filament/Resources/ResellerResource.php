@@ -106,6 +106,15 @@ class ResellerResource extends Resource
                             ->helperText('پس از ایجاد ریسلر، می‌توانید تنظیمات هر پنل را جداگانه مدیریت کنید.'),
                     ]),
 
+                Forms\Components\Section::make('تنظیمات API')
+                    ->description('مدیریت دسترسی API برای این ریسلر')
+                    ->schema([
+                        Forms\Components\Toggle::make('api_enabled')
+                            ->label('فعال‌سازی API')
+                            ->helperText('اجازه می‌دهد این ریسلر کلیدهای API برای دسترسی برنامه‌ای ایجاد کند')
+                            ->default(false),
+                    ]),
+
                 Forms\Components\Select::make('status')
                     ->label('وضعیت')
                     ->options([
@@ -324,6 +333,16 @@ class ResellerResource extends Resource
                         return "تعداد: {$panels->count()} | نوع: {$types}";
                     })
                     ->wrap(),
+
+                Tables\Columns\IconColumn::make('api_enabled')
+                    ->label('API')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('gray')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('تاریخ ایجاد')
