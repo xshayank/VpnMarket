@@ -31,6 +31,7 @@ class ResellerConfig extends Model
         'created_by',
         'disabled_at',
         'meta',
+        'created_by_api_key_id',
     ];
 
     protected $casts = [
@@ -56,6 +57,11 @@ class ResellerConfig extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function createdByApiKey(): BelongsTo
+    {
+        return $this->belongsTo(ApiKey::class, 'created_by_api_key_id');
     }
 
     public function events(): HasMany

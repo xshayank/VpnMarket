@@ -100,6 +100,11 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasOne(Reseller::class);
     }
 
+    public function apiKeys()
+    {
+        return $this->hasMany(ApiKey::class);
+    }
+
     public function isReseller(): bool
     {
         return $this->reseller()->exists();
