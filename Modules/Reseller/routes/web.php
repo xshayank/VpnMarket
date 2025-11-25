@@ -6,6 +6,7 @@ use Modules\Reseller\Http\Controllers\PlanPurchaseController;
 use Modules\Reseller\Http\Controllers\ConfigController;
 use Modules\Reseller\Http\Controllers\SyncController;
 use Modules\Reseller\Http\Controllers\TicketController;
+use Modules\Reseller\Http\Controllers\ApiKeyController;
 
 /*
 |--------------------------------------------------------------------------
@@ -56,4 +57,10 @@ Route::prefix('reseller')
         Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
         Route::get('/tickets/{ticket}', [TicketController::class, 'show'])->name('tickets.show');
         Route::post('/tickets/{ticket}/reply', [TicketController::class, 'reply'])->name('tickets.reply');
+
+        // API Keys management
+        Route::get('/api-keys', [ApiKeyController::class, 'index'])->name('api-keys.index');
+        Route::post('/api-keys', [ApiKeyController::class, 'store'])->name('api-keys.store');
+        Route::post('/api-keys/{id}/revoke', [ApiKeyController::class, 'revoke'])->name('api-keys.revoke');
+        Route::delete('/api-keys/{id}', [ApiKeyController::class, 'destroy'])->name('api-keys.destroy');
     });

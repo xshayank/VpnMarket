@@ -89,6 +89,22 @@
                             <span>تیکت‌ها</span>
                         </a>
                     @endif
+
+                    @if(Auth::user()->reseller && Auth::user()->reseller->api_enabled)
+                        {{-- API Keys --}}
+                        <a href="{{ route('reseller.api-keys.index') }}" 
+                           class="flex items-center px-2 md:px-3 py-2 text-xs md:text-sm font-medium rounded-lg transition-colors duration-150 whitespace-nowrap
+                                  {{ request()->routeIs('reseller.api-keys.*') 
+                                      ? 'bg-gray-700 text-white' 
+                                      : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}"
+                           title="کلیدهای API">
+                            <svg class="w-4 h-4 md:w-5 md:h-5 ml-1 md:ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                            </svg>
+                            <span>کلیدهای API</span>
+                        </a>
+                    @endif
                     </div>
 
                     <div class="flex items-center flex-shrink-0 text-gray-100 space-x-2 space-x-reverse">
