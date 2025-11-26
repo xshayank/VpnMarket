@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApiAuditLog;
-use App\Models\ApiKey;
 use App\Models\AuditLog;
 use App\Models\Panel;
 use App\Models\Plan;
@@ -79,7 +78,7 @@ class ConfigController extends Controller
             ->where('external_username', $name)
             ->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'error' => true,
                 'message' => 'Config not found',
@@ -126,7 +125,7 @@ class ConfigController extends Controller
         $apiKey = $request->attributes->get('api_key');
 
         // Validate reseller can create configs
-        if (!$reseller->supportsConfigManagement()) {
+        if (! $reseller->supportsConfigManagement()) {
             return response()->json([
                 'error' => true,
                 'message' => 'This feature is only available for traffic-based and wallet-based resellers',
@@ -171,7 +170,7 @@ class ConfigController extends Controller
             || $reseller->panel_id == $request->panel_id
             || $reseller->primary_panel_id == $request->panel_id;
 
-        if (!$hasAccess) {
+        if (! $hasAccess) {
             return response()->json([
                 'error' => true,
                 'message' => 'You do not have access to the selected panel',
@@ -219,7 +218,7 @@ class ConfigController extends Controller
 
             if ($allowedNodeIds) {
                 foreach ($nodeIds as $nodeId) {
-                    if (!in_array($nodeId, $allowedNodeIds, true)) {
+                    if (! in_array($nodeId, $allowedNodeIds, true)) {
                         return response()->json([
                             'error' => true,
                             'message' => 'One or more selected nodes are not allowed for your account',
@@ -235,7 +234,7 @@ class ConfigController extends Controller
             $allowedServiceIds = json_decode($panelAccess->allowed_service_ids, true) ?: [];
 
             foreach ($serviceIds as $serviceId) {
-                if (!in_array($serviceId, $allowedServiceIds)) {
+                if (! in_array($serviceId, $allowedServiceIds)) {
                     return response()->json([
                         'error' => true,
                         'message' => 'One or more selected services are not allowed for your account',
@@ -248,7 +247,7 @@ class ConfigController extends Controller
         $config = null;
 
         try {
-            DB::transaction(function () use ($request, $reseller, $user, $panel, $panelType, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $apiKey, &$result, &$config) {
+            DB::transaction(function () use ($request, $reseller, $user, $panel, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $apiKey, &$result, &$config) {
                 $provisioner = new ResellerProvisioner;
 
                 $customName = $request->input('custom_name');
@@ -380,7 +379,7 @@ class ConfigController extends Controller
             ->where('external_username', $name)
             ->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'error' => true,
                 'message' => 'Config not found',
@@ -413,7 +412,7 @@ class ConfigController extends Controller
         if ($trafficLimitBytes < $config->usage_bytes) {
             return response()->json([
                 'error' => true,
-                'message' => 'Traffic limit cannot be set below current usage (' . round($config->usage_bytes / (1024 * 1024 * 1024), 2) . ' GB)',
+                'message' => 'Traffic limit cannot be set below current usage ('.round($config->usage_bytes / (1024 * 1024 * 1024), 2).' GB)',
             ], 422);
         }
 
@@ -427,7 +426,7 @@ class ConfigController extends Controller
         $remoteResult = null;
 
         try {
-            DB::transaction(function () use ($config, $trafficLimitBytes, $expiresAt, $meta, $maxClients, $oldMaxClients, $apiKey, &$remoteResult) {
+            DB::transaction(function () use ($config, $trafficLimitBytes, $expiresAt, $meta, $maxClients, $apiKey, &$remoteResult) {
                 $config->update([
                     'traffic_limit_bytes' => $trafficLimitBytes,
                     'expires_at' => $expiresAt,
@@ -464,7 +463,7 @@ class ConfigController extends Controller
                             );
                         }
                     } catch (\Exception $e) {
-                        Log::error("API config update exception: " . $e->getMessage());
+                        Log::error('API config update exception: '.$e->getMessage());
                         $remoteResult['last_error'] = $e->getMessage();
                     }
                 }
@@ -530,7 +529,7 @@ class ConfigController extends Controller
             ->where('external_username', $name)
             ->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'error' => true,
                 'message' => 'Config not found',
@@ -545,13 +544,13 @@ class ConfigController extends Controller
                 $provisioner = new ResellerProvisioner;
                 $success = $provisioner->deleteUser($config->panel_type, $panel->getCredentials(), $config->panel_user_id);
 
-                if (!$success) {
+                if (! $success) {
                     $remoteFailed = true;
                     Log::warning("API: Failed to delete config {$config->id} on remote panel");
                 }
             } catch (\Exception $e) {
                 $remoteFailed = true;
-                Log::error("API: Exception deleting config: " . $e->getMessage());
+                Log::error('API: Exception deleting config: '.$e->getMessage());
             }
         }
 
@@ -592,7 +591,7 @@ class ConfigController extends Controller
 
         return response()->json([
             'message' => 'Config deleted successfully',
-            'remote_sync' => !$remoteFailed,
+            'remote_sync' => ! $remoteFailed,
         ]);
     }
 }
