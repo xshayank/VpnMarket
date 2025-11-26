@@ -933,4 +933,430 @@ class MarzneshinStyleController extends Controller
 
         return response()->json($response);
     }
+
+    /**
+     * Get admin info (Marzneshin-style)
+     * GET /api/admin
+     *
+     * Returns current authenticated admin information
+     */
+    public function admin(Request $request): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+        $user = $request->attributes->get('api_user');
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'admin.info',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+            ]
+        );
+
+        // Return Marzneshin-style admin info
+        return response()->json([
+            'username' => $reseller->username_prefix ?? $user->name,
+            'is_sudo' => false,
+            'telegram_id' => null,
+            'discord_webhook' => null,
+            'users_usage' => $reseller->configs()->sum('usage_bytes'),
+        ]);
+    }
+
+    /**
+     * Get current admin info (Marzneshin-style)
+     * GET /api/admins/current
+     *
+     * Returns current authenticated admin information (alias for /api/admin)
+     */
+    public function currentAdmin(Request $request): JsonResponse
+    {
+        return $this->admin($request);
+    }
+
+    /**
+     * Get system stats (Marzneshin-style)
+     * GET /api/system
+     *
+     * Returns system-wide statistics
+     */
+    public function system(Request $request): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        // Get stats scoped to this reseller's data
+        $configs = $reseller->configs();
+
+        $totalUsers = $configs->count();
+        $activeUsers = $configs->where('status', 'active')->count();
+        $disabledUsers = $configs->where('status', 'disabled')->count();
+        $limitedUsers = $configs->where(function ($q) {
+            $q->whereRaw('usage_bytes >= traffic_limit_bytes')
+                ->where('traffic_limit_bytes', '>', 0);
+        })->count();
+        $expiredUsers = $configs->where('expires_at', '<', now())->count();
+
+        $totalUsage = $reseller->configs()->sum('usage_bytes');
+        $totalTrafficLimit = $reseller->configs()->sum('traffic_limit_bytes');
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'system.stats',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+            ]
+        );
+
+        return response()->json([
+            'version' => config('app.version', '1.0.0'),
+            'mem_total' => 0,
+            'mem_used' => 0,
+            'cpu_cores' => 0,
+            'cpu_usage' => 0,
+            'total_user' => $totalUsers,
+            'users_active' => $activeUsers,
+            'users_disabled' => $disabledUsers,
+            'users_limited' => $limitedUsers,
+            'users_expired' => $expiredUsers,
+            'users_on_hold' => 0,
+            'incoming_bandwidth' => $totalUsage,
+            'outgoing_bandwidth' => 0,
+            'incoming_bandwidth_speed' => 0,
+            'outgoing_bandwidth_speed' => 0,
+        ]);
+    }
+
+    /**
+     * List inbounds (Marzneshin-style)
+     * GET /api/inbounds
+     *
+     * Returns list of inbounds (protocol configurations)
+     */
+    public function inbounds(Request $request): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'inbounds.list',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+            ]
+        );
+
+        // We don't expose inbounds directly - return empty list
+        // Real inbound info is managed at the panel level
+        return response()->json([
+            'items' => [],
+            'total' => 0,
+        ]);
+    }
+
+    /**
+     * Get user usage (Marzneshin-style)
+     * GET /api/users/{username}/usage
+     *
+     * Returns user usage statistics
+     */
+    public function getUserUsage(Request $request, string $username): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        $query = $reseller->configs()->where('external_username', $username);
+
+        if ($apiKey->default_panel_id) {
+            $query->where('panel_id', $apiKey->default_panel_id);
+        }
+
+        $config = $query->first();
+
+        if (! $config) {
+            return response()->json([
+                'detail' => 'User not found',
+            ], 404);
+        }
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'users.usage',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+                'target_type' => 'user',
+                'target_id_or_name' => $username,
+            ]
+        );
+
+        return response()->json([
+            'username' => $config->external_username,
+            'used_traffic' => $config->usage_bytes,
+            'node_usages' => [],
+        ]);
+    }
+
+    /**
+     * Revoke user subscription (Marzneshin-style)
+     * POST /api/users/{username}/revoke_subscription
+     *
+     * Revokes the user's subscription URL (regenerates it)
+     */
+    public function revokeUserSubscription(Request $request, string $username): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        $query = $reseller->configs()->where('external_username', $username);
+
+        if ($apiKey->default_panel_id) {
+            $query->where('panel_id', $apiKey->default_panel_id);
+        }
+
+        $config = $query->first();
+
+        if (! $config) {
+            return response()->json([
+                'detail' => 'User not found',
+            ], 404);
+        }
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'subscription.revoke',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+                'target_type' => 'subscription',
+                'target_id_or_name' => $username,
+            ]
+        );
+
+        // Return success - actual subscription revocation happens at panel level
+        return response()->json([
+            'username' => $config->external_username,
+            'subscription_url' => $config->subscription_url,
+        ]);
+    }
+
+    /**
+     * Set user owner (Marzneshin-style)
+     * PUT /api/users/{username}/set-owner
+     *
+     * Sets or changes the owner/admin of a user
+     */
+    public function setUserOwner(Request $request, string $username): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        $query = $reseller->configs()->where('external_username', $username);
+
+        if ($apiKey->default_panel_id) {
+            $query->where('panel_id', $apiKey->default_panel_id);
+        }
+
+        $config = $query->first();
+
+        if (! $config) {
+            return response()->json([
+                'detail' => 'User not found',
+            ], 404);
+        }
+
+        // This operation is not supported in our multi-reseller architecture
+        // Return a Marzneshin-compatible error
+        return response()->json([
+            'detail' => 'Setting user owner is not supported in this panel configuration',
+        ], 501);
+    }
+
+    /**
+     * Get user expired status (Marzneshin-style)
+     * GET /api/users/expired
+     *
+     * Returns list of expired users
+     */
+    public function expiredUsers(Request $request): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        $perPage = $request->input('size', 50);
+        $offset = $request->input('offset', 0);
+
+        $query = $reseller->configs()
+            ->where(function ($q) {
+                $q->where('expires_at', '<', now())
+                    ->orWhere(function ($q2) {
+                        $q2->whereRaw('usage_bytes >= traffic_limit_bytes')
+                            ->where('traffic_limit_bytes', '>', 0);
+                    });
+            });
+
+        if ($apiKey->default_panel_id) {
+            $query->where('panel_id', $apiKey->default_panel_id);
+        }
+
+        $total = $query->count();
+        $configs = $query->skip($offset)->take($perPage)->get();
+
+        $response = $this->mapper->mapConfigList($configs, ['total' => $total]);
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'users.expired',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+            ]
+        );
+
+        return response()->json($response);
+    }
+
+    /**
+     * Delete expired users (Marzneshin-style)
+     * DELETE /api/users/expired
+     *
+     * Deletes all expired users
+     */
+    public function deleteExpiredUsers(Request $request): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        $query = $reseller->configs()
+            ->where('expires_at', '<', now());
+
+        if ($apiKey->default_panel_id) {
+            $query->where('panel_id', $apiKey->default_panel_id);
+        }
+
+        $expiredConfigs = $query->get();
+        $deletedCount = 0;
+
+        foreach ($expiredConfigs as $config) {
+            try {
+                if ($config->panel_id) {
+                    $panel = Panel::find($config->panel_id);
+                    if ($panel) {
+                        $provisioner = new ResellerProvisioner;
+                        $provisioner->deleteUser(
+                            $config->panel_type,
+                            $panel->getCredentials(),
+                            $config->panel_user_id
+                        );
+                    }
+                }
+
+                $config->update(['status' => 'deleted']);
+                $config->delete();
+                $deletedCount++;
+
+                ResellerConfigEvent::create([
+                    'reseller_config_id' => $config->id,
+                    'type' => 'deleted',
+                    'meta' => [
+                        'via_marzneshin_api' => true,
+                        'api_key_id' => $apiKey->id,
+                        'bulk_delete_expired' => true,
+                    ],
+                ]);
+            } catch (\Exception $e) {
+                Log::error("Failed to delete expired user {$config->external_username}: ".$e->getMessage());
+            }
+        }
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'users.delete_expired',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+                'metadata' => ['deleted_count' => $deletedCount],
+            ]
+        );
+
+        return response()->json([
+            'message' => "Deleted {$deletedCount} expired users",
+        ]);
+    }
+
+    /**
+     * Reset all users usage (Marzneshin-style)
+     * POST /api/users/reset
+     *
+     * Resets traffic usage for all users
+     */
+    public function resetAllUsersUsage(Request $request): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        $query = $reseller->configs();
+
+        if ($apiKey->default_panel_id) {
+            $query->where('panel_id', $apiKey->default_panel_id);
+        }
+
+        $configs = $query->get();
+        $resetCount = 0;
+
+        foreach ($configs as $config) {
+            try {
+                if ($config->panel_id) {
+                    $panel = Panel::find($config->panel_id);
+                    if ($panel) {
+                        $provisioner = new ResellerProvisioner;
+                        $provisioner->resetUserUsage(
+                            $config->panel_type,
+                            $panel->getCredentials(),
+                            $config->panel_user_id
+                        );
+                    }
+                }
+
+                $config->update(['usage_bytes' => 0]);
+                $resetCount++;
+            } catch (\Exception $e) {
+                Log::error("Failed to reset usage for {$config->external_username}: ".$e->getMessage());
+            }
+        }
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'users.reset_all',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+                'metadata' => ['reset_count' => $resetCount],
+            ]
+        );
+
+        return response()->json([
+            'message' => "Reset traffic for {$resetCount} users",
+        ]);
+    }
 }

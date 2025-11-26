@@ -197,7 +197,7 @@ class AuthenticateApiKey
 
         if ($apiKey && $apiKey->isMarzneshinStyle()) {
             $useMarzneshinFormat = true;
-        } elseif (str_contains($request->path(), 'marzneshin') || str_contains($request->path(), 'admins/token')) {
+        } elseif ($this->isMarzneshinStylePath($request->path())) {
             $useMarzneshinFormat = true;
         }
 
@@ -217,5 +217,30 @@ class AuthenticateApiKey
         }
 
         return $response;
+    }
+
+    /**
+     * Check if the request path is a Marzneshin-style endpoint
+     */
+    protected function isMarzneshinStylePath(string $path): bool
+    {
+        // Marzneshin-style endpoints (not in /api/v1/ namespace)
+        $marzneshinPatterns = [
+            'api/users',
+            'api/admins',
+            'api/admin',
+            'api/services',
+            'api/nodes',
+            'api/inbounds',
+            'api/system',
+        ];
+
+        foreach ($marzneshinPatterns as $pattern) {
+            if (str_starts_with($path, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

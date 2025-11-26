@@ -106,32 +106,71 @@ Route::middleware(['api.key'])->prefix('v1')->group(function () {
 // Token endpoint (public - uses form auth like Marzneshin)
 Route::post('admins/token', [MarzneshinStyleController::class, 'token']);
 
+// Admin info endpoints (Marzneshin-style)
+Route::get('admin', [MarzneshinStyleController::class, 'admin'])
+    ->middleware('api.key:users:read');
+Route::get('admins/current', [MarzneshinStyleController::class, 'currentAdmin'])
+    ->middleware('api.key:users:read');
+
+// System endpoint (Marzneshin-style)
+Route::get('system', [MarzneshinStyleController::class, 'system'])
+    ->middleware('api.key:users:read');
+
+// Inbounds endpoint (Marzneshin-style)
+Route::get('inbounds', [MarzneshinStyleController::class, 'inbounds'])
+    ->middleware('api.key:services:list');
+
 // Marzneshin-style routes (API key authenticated with specific scopes)
 // Services endpoint (maps Eylandoo nodes to Marzneshin services)
 Route::get('services', [MarzneshinStyleController::class, 'services'])
     ->middleware('api.key:services:list');
 
 // Users endpoint (Marzneshin-style user management)
+// Bulk operations first (more specific routes)
+Route::get('users/expired', [MarzneshinStyleController::class, 'expiredUsers'])
+    ->middleware('api.key:users:read');
+Route::delete('users/expired', [MarzneshinStyleController::class, 'deleteExpiredUsers'])
+    ->middleware('api.key:users:delete');
+Route::post('users/reset', [MarzneshinStyleController::class, 'resetAllUsersUsage'])
+    ->middleware('api.key:users:update');
+
+// Single user operations
 Route::get('users', [MarzneshinStyleController::class, 'users'])
     ->middleware('api.key:users:read');
 Route::get('users/{username}', [MarzneshinStyleController::class, 'getUser'])
-    ->middleware('api.key:users:read');
+    ->middleware('api.key:users:read')
+    ->where('username', '[a-zA-Z0-9_-]+');
 Route::post('users', [MarzneshinStyleController::class, 'createUser'])
     ->middleware('api.key:users:create');
 Route::put('users/{username}', [MarzneshinStyleController::class, 'updateUser'])
-    ->middleware('api.key:users:update');
+    ->middleware('api.key:users:update')
+    ->where('username', '[a-zA-Z0-9_-]+');
 Route::delete('users/{username}', [MarzneshinStyleController::class, 'deleteUser'])
-    ->middleware('api.key:users:delete');
+    ->middleware('api.key:users:delete')
+    ->where('username', '[a-zA-Z0-9_-]+');
 
 // User actions
 Route::get('users/{username}/subscription', [MarzneshinStyleController::class, 'getUserSubscription'])
-    ->middleware('api.key:subscription:read');
+    ->middleware('api.key:subscription:read')
+    ->where('username', '[a-zA-Z0-9_-]+');
+Route::get('users/{username}/usage', [MarzneshinStyleController::class, 'getUserUsage'])
+    ->middleware('api.key:users:read')
+    ->where('username', '[a-zA-Z0-9_-]+');
 Route::post('users/{username}/enable', [MarzneshinStyleController::class, 'enableUser'])
-    ->middleware('api.key:users:update');
+    ->middleware('api.key:users:update')
+    ->where('username', '[a-zA-Z0-9_-]+');
 Route::post('users/{username}/disable', [MarzneshinStyleController::class, 'disableUser'])
-    ->middleware('api.key:users:update');
+    ->middleware('api.key:users:update')
+    ->where('username', '[a-zA-Z0-9_-]+');
 Route::post('users/{username}/reset', [MarzneshinStyleController::class, 'resetUser'])
-    ->middleware('api.key:users:update');
+    ->middleware('api.key:users:update')
+    ->where('username', '[a-zA-Z0-9_-]+');
+Route::post('users/{username}/revoke_subscription', [MarzneshinStyleController::class, 'revokeUserSubscription'])
+    ->middleware('api.key:users:update')
+    ->where('username', '[a-zA-Z0-9_-]+');
+Route::put('users/{username}/set-owner', [MarzneshinStyleController::class, 'setUserOwner'])
+    ->middleware('api.key:users:update')
+    ->where('username', '[a-zA-Z0-9_-]+');
 
 // Nodes endpoint
 Route::get('nodes', [MarzneshinStyleController::class, 'nodes'])
