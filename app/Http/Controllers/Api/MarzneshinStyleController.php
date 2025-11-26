@@ -989,20 +989,21 @@ class MarzneshinStyleController extends Controller
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        // Get stats scoped to this reseller's data
-        $configs = $reseller->configs();
+        // Get current datetime for comparison
+        $now = now()->format('Y-m-d H:i:s');
 
-        $totalUsers = $configs->count();
-        $activeUsers = $configs->where('status', 'active')->count();
-        $disabledUsers = $configs->where('status', 'disabled')->count();
-        $limitedUsers = $configs->where(function ($q) {
-            $q->whereRaw('usage_bytes >= traffic_limit_bytes')
-                ->where('traffic_limit_bytes', '>', 0);
-        })->count();
-        $expiredUsers = $configs->where('expires_at', '<', now())->count();
-
-        $totalUsage = $reseller->configs()->sum('usage_bytes');
-        $totalTrafficLimit = $reseller->configs()->sum('traffic_limit_bytes');
+        // Get stats scoped to this reseller's data using a single optimized query
+        $stats = $reseller->configs()
+            ->selectRaw("
+                COUNT(*) as total_users,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_users,
+                SUM(CASE WHEN status = 'disabled' THEN 1 ELSE 0 END) as disabled_users,
+                SUM(CASE WHEN usage_bytes >= traffic_limit_bytes AND traffic_limit_bytes > 0 THEN 1 ELSE 0 END) as limited_users,
+                SUM(CASE WHEN expires_at < ? THEN 1 ELSE 0 END) as expired_users,
+                SUM(usage_bytes) as total_usage,
+                SUM(traffic_limit_bytes) as total_traffic_limit
+            ", [$now])
+            ->first();
 
         // Log the action
         ApiAuditLog::logRequest(
@@ -1021,13 +1022,13 @@ class MarzneshinStyleController extends Controller
             'mem_used' => 0,
             'cpu_cores' => 0,
             'cpu_usage' => 0,
-            'total_user' => $totalUsers,
-            'users_active' => $activeUsers,
-            'users_disabled' => $disabledUsers,
-            'users_limited' => $limitedUsers,
-            'users_expired' => $expiredUsers,
+            'total_user' => (int) ($stats->total_users ?? 0),
+            'users_active' => (int) ($stats->active_users ?? 0),
+            'users_disabled' => (int) ($stats->disabled_users ?? 0),
+            'users_limited' => (int) ($stats->limited_users ?? 0),
+            'users_expired' => (int) ($stats->expired_users ?? 0),
             'users_on_hold' => 0,
-            'incoming_bandwidth' => $totalUsage,
+            'incoming_bandwidth' => (int) ($stats->total_usage ?? 0),
             'outgoing_bandwidth' => 0,
             'incoming_bandwidth_speed' => 0,
             'outgoing_bandwidth_speed' => 0,
@@ -1250,29 +1251,27 @@ class MarzneshinStyleController extends Controller
             $query->where('panel_id', $apiKey->default_panel_id);
         }
 
-        $expiredConfigs = $query->get();
+        // Preload panels to avoid N+1 queries
+        $expiredConfigs = $query->with('panel')->get();
         $deletedCount = 0;
+        $provisioner = new ResellerProvisioner;
 
         foreach ($expiredConfigs as $config) {
+            // Store config ID before deletion
+            $configId = $config->id;
+
             try {
-                if ($config->panel_id) {
-                    $panel = Panel::find($config->panel_id);
-                    if ($panel) {
-                        $provisioner = new ResellerProvisioner;
-                        $provisioner->deleteUser(
-                            $config->panel_type,
-                            $panel->getCredentials(),
-                            $config->panel_user_id
-                        );
-                    }
+                if ($config->panel_id && $config->panel) {
+                    $provisioner->deleteUser(
+                        $config->panel_type,
+                        $config->panel->getCredentials(),
+                        $config->panel_user_id
+                    );
                 }
 
-                $config->update(['status' => 'deleted']);
-                $config->delete();
-                $deletedCount++;
-
+                // Create event before soft delete (config still exists)
                 ResellerConfigEvent::create([
-                    'reseller_config_id' => $config->id,
+                    'reseller_config_id' => $configId,
                     'type' => 'deleted',
                     'meta' => [
                         'via_marzneshin_api' => true,
@@ -1280,6 +1279,11 @@ class MarzneshinStyleController extends Controller
                         'bulk_delete_expired' => true,
                     ],
                 ]);
+
+                $config->update(['status' => 'deleted']);
+                $config->delete();
+                $deletedCount++;
+
             } catch (\Exception $e) {
                 Log::error("Failed to delete expired user {$config->external_username}: ".$e->getMessage());
             }
@@ -1319,21 +1323,19 @@ class MarzneshinStyleController extends Controller
             $query->where('panel_id', $apiKey->default_panel_id);
         }
 
-        $configs = $query->get();
+        // Preload panels to avoid N+1 queries
+        $configs = $query->with('panel')->get();
         $resetCount = 0;
+        $provisioner = new ResellerProvisioner;
 
         foreach ($configs as $config) {
             try {
-                if ($config->panel_id) {
-                    $panel = Panel::find($config->panel_id);
-                    if ($panel) {
-                        $provisioner = new ResellerProvisioner;
-                        $provisioner->resetUserUsage(
-                            $config->panel_type,
-                            $panel->getCredentials(),
-                            $config->panel_user_id
-                        );
-                    }
+                if ($config->panel_id && $config->panel) {
+                    $provisioner->resetUserUsage(
+                        $config->panel_type,
+                        $config->panel->getCredentials(),
+                        $config->panel_user_id
+                    );
                 }
 
                 $config->update(['usage_bytes' => 0]);
