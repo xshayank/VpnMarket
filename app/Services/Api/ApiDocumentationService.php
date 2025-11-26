@@ -465,6 +465,21 @@ class ApiDocumentationService
                 'Some Marzneshin service features (inbounds, protocols) are not available for Eylandoo',
                 'service_ids in user creation map to node_ids for Eylandoo panels',
             ],
+            'eylandoo_expiry_translation' => [
+                'title' => 'Eylandoo "never" Expiry Translation',
+                'description' => 'Eylandoo panels do not implement "never" expiry natively. When expire_strategy is set to "never", it is translated to a long fixed_date (10 years from creation).',
+                'behavior' => 'expire_strategy: "never" → expires_at: now() + 10 years',
+                'note' => 'This ensures consistent behavior across all panel types while maintaining practical "never expires" semantics.',
+            ],
+            'username_prefix_resolution' => [
+                'title' => 'Username Prefix Resolution',
+                'description' => 'Our panel does not support free-form name selection. When creating users via API, the provided username is stored as a prefix.',
+                'behavior' => [
+                    'On creation: The API-provided username is stored in the prefix field and used for lookup.',
+                    'On read/update/delete: If exact external_username match is not found, the system searches by stored prefix and returns the matching config (or the most recent one).',
+                ],
+                'note' => 'This ensures bot compatibility when panel-generated usernames differ from the bot-provided username.',
+            ],
         ];
     }
 
@@ -487,6 +502,7 @@ class ApiDocumentationService
                 'users_endpoint' => 'Full support',
                 'nodes_endpoint' => 'Full support - returns nodes',
                 'notes' => 'Nodes are exposed as services for Marzneshin client compatibility',
+                'expiry_handling' => '"never" expiry strategy translated to 10-year fixed_date',
             ],
         ];
     }
