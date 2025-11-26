@@ -11,6 +11,11 @@ use Illuminate\Support\Str;
 class ApiWebhook extends Model
 {
     /**
+     * Maximum consecutive failures before disabling webhook
+     */
+    public const MAX_FAILURES_BEFORE_DISABLE = 10;
+
+    /**
      * Webhook event types
      */
     public const EVENT_CONFIG_CREATED = 'config.created';
@@ -153,8 +158,9 @@ class ApiWebhook extends Model
             'last_error' => Str::limit($error, 500),
         ]);
 
-        // Disable webhook after 10 consecutive failures
-        if ($this->failure_count >= 10) {
+        // Disable webhook after reaching max consecutive failures
+        $maxFailures = config('api.webhook_max_failures', self::MAX_FAILURES_BEFORE_DISABLE);
+        if ($this->failure_count >= $maxFailures) {
             $this->update(['is_active' => false]);
             Log::warning('Webhook disabled due to repeated failures', [
                 'webhook_id' => $this->id,

@@ -19,9 +19,17 @@ class PanelHealthService
     protected const CACHE_PREFIX = 'panel_health:';
 
     /**
-     * Cache TTL in seconds (5 minutes)
+     * Default cache TTL in seconds (5 minutes)
      */
-    protected const CACHE_TTL = 300;
+    protected const DEFAULT_CACHE_TTL = 300;
+
+    /**
+     * Get cache TTL from config or use default
+     */
+    protected function getCacheTtl(): int
+    {
+        return config('api.panel_health_cache_ttl', self::DEFAULT_CACHE_TTL);
+    }
 
     /**
      * Check health status for a panel
@@ -39,7 +47,7 @@ class PanelHealthService
         $result = $this->performHealthCheck($panel);
 
         // Cache the result
-        Cache::put($cacheKey, $result, self::CACHE_TTL);
+        Cache::put($cacheKey, $result, $this->getCacheTtl());
 
         return $result;
     }

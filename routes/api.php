@@ -1,9 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\ApiDocumentationController;
 use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\MarzneshinStyleController;
 use App\Http\Controllers\Api\PanelController;
+use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\AuditLogsController;
 use App\Http\Controllers\PanelsController;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +33,42 @@ Route::middleware(['auth'])->prefix('keys')->group(function () {
     Route::get('/{id}/analytics', [ApiKeyController::class, 'analytics']);
     Route::delete('/{id}', [ApiKeyController::class, 'destroy']);
     Route::get('/panels', [ApiKeyController::class, 'availablePanels']);
+});
+
+// Webhook management routes (session-authenticated, for resellers)
+Route::middleware(['auth'])->prefix('webhooks')->group(function () {
+    Route::get('/', [WebhookController::class, 'index']);
+    Route::post('/', [WebhookController::class, 'store']);
+    Route::get('/events', [WebhookController::class, 'events']);
+    Route::get('/{id}', [WebhookController::class, 'show']);
+    Route::put('/{id}', [WebhookController::class, 'update']);
+    Route::delete('/{id}', [WebhookController::class, 'destroy']);
+    Route::post('/{id}/regenerate-secret', [WebhookController::class, 'regenerateSecret']);
+    Route::post('/{id}/test', [WebhookController::class, 'test']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| API Documentation Routes (public and authenticated)
+|--------------------------------------------------------------------------
+*/
+// Public documentation endpoints
+Route::prefix('docs')->group(function () {
+    Route::get('/styles', [ApiDocumentationController::class, 'styles']);
+    Route::get('/documentation', [ApiDocumentationController::class, 'documentation']);
+    Route::get('/cheat-sheet', [ApiDocumentationController::class, 'cheatSheet']);
+    Route::get('/scopes', [ApiDocumentationController::class, 'scopes']);
+    Route::get('/field-mapping', [ApiDocumentationController::class, 'fieldMapping']);
+    Route::get('/webhook-events', [ApiDocumentationController::class, 'webhookEvents']);
+    Route::get('/openapi', [ApiDocumentationController::class, 'openApiSpec']);
+    Route::get('/markdown', [ApiDocumentationController::class, 'markdownDoc']);
+});
+
+// Authenticated documentation/analytics endpoints
+Route::middleware(['auth'])->prefix('docs')->group(function () {
+    Route::get('/panel-health', [ApiDocumentationController::class, 'panelHealth']);
+    Route::post('/panel-health/{panelId}/refresh', [ApiDocumentationController::class, 'refreshPanelHealth']);
+    Route::get('/analytics', [ApiDocumentationController::class, 'analytics']);
 });
 
 /*

@@ -300,13 +300,27 @@ class ApiKey extends Model
 
     /**
      * Get style-specific scopes
+     * 
+     * Note: For Marzneshin style, returns the Marzneshin scope names.
+     * For Falco style, returns all available scopes.
+     * Both return an array of scope strings.
+     * 
+     * @param string $style The API style (falco or marzneshin)
+     * @return array Array of scope name strings
      */
     public static function getScopesForStyle(string $style): array
     {
         if ($style === self::STYLE_MARZNESHIN) {
+            // Return Marzneshin-compatible scope names
             return array_keys(self::MARZNESHIN_SCOPES);
         }
 
+        // Return all available scopes for Falco style
         return self::ALL_SCOPES;
     }
+
+    /**
+     * Default rate limit per minute
+     */
+    public const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
 }
