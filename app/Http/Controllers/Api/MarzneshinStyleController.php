@@ -120,47 +120,114 @@ class MarzneshinStyleController extends Controller
             ], 401);
         }
 
+        $apiKey = null;
+        $isLegacyFlow = false;
+
         // Method 1: Legacy API key flow (username === password and matches API key hash)
         if ($username === $password) {
             $keyHash = ApiKey::hashKey($username);
             $apiKey = ApiKey::where('key_hash', $keyHash)->first();
-
-            if ($apiKey && $apiKey->isValid() && $apiKey->isMarzneshinStyle()) {
-                // Return the same key as a "token" (stateless API)
-                return response()->json([
-                    'access_token' => $username,
-                    'token_type' => 'bearer',
-                ]);
+            if ($apiKey) {
+                $isLegacyFlow = true;
             }
         }
 
-        // Method 2: Admin credential flow
-        // Look for Marzneshin API key with matching admin_username
-        $apiKey = ApiKey::where('admin_username', $username)
-            ->where('api_style', ApiKey::STYLE_MARZNESHIN)
-            ->first();
+        // Method 2: Admin credential flow (if legacy flow didn't find a key)
+        if (! $apiKey) {
+            // Look for Marzneshin API key with matching admin_username
+            $apiKey = ApiKey::where('admin_username', $username)
+                ->where('api_style', ApiKey::STYLE_MARZNESHIN)
+                ->first();
 
-        if ($apiKey && $apiKey->isValid() && $apiKey->authenticateAdminCredentials($username, $password)) {
-            // Generate an ephemeral session token and store in cache
-            $sessionToken = 'mzsess_' . bin2hex(random_bytes(32));
-            $ttlMinutes = self::SESSION_TOKEN_TTL_MINUTES;
+            // Verify password for admin credential flow
+            if ($apiKey && ! $apiKey->authenticateAdminCredentials($username, $password)) {
+                return response()->json([
+                    'detail' => 'Invalid credentials',
+                ], 401);
+            }
+        }
 
-            \Illuminate\Support\Facades\Cache::put(
-                "api_session:{$sessionToken}",
-                $apiKey->id,
-                now()->addMinutes($ttlMinutes)
-            );
-
+        // No API key found
+        if (! $apiKey) {
             return response()->json([
-                'access_token' => $sessionToken,
+                'detail' => 'Invalid credentials',
+            ], 401);
+        }
+
+        // Validate API key is Marzneshin style
+        if (! $apiKey->isMarzneshinStyle()) {
+            return response()->json([
+                'detail' => 'This endpoint requires a Marzneshin-style API key',
+            ], 403);
+        }
+
+        // Check if key is valid (not revoked, not expired)
+        if (! $apiKey->isValid()) {
+            // Determine the specific reason for invalidity
+            if ($apiKey->revoked) {
+                $reason = 'API key has been revoked';
+            } elseif ($apiKey->expires_at && $apiKey->expires_at->isPast()) {
+                $reason = 'API key has expired';
+            } else {
+                $reason = 'API key is invalid';
+            }
+            return response()->json([
+                'detail' => $reason,
+            ], 401);
+        }
+
+        // Check if reseller has API enabled
+        $user = $apiKey->user;
+        if (! $user) {
+            return response()->json([
+                'detail' => 'API key owner not found',
+            ], 403);
+        }
+
+        $reseller = $user->reseller;
+        if (! $reseller) {
+            return response()->json([
+                'detail' => 'No reseller account associated with this API key',
+            ], 403);
+        }
+
+        if (! $reseller->api_enabled) {
+            return response()->json([
+                'detail' => 'API access is not enabled for this account',
+            ], 403);
+        }
+
+        // Check if reseller is active
+        if (! $reseller->isActive()) {
+            return response()->json([
+                'detail' => 'Reseller account is not active',
+            ], 403);
+        }
+
+        // Return appropriate token based on auth flow
+        if ($isLegacyFlow) {
+            // Return the same key as a "token" (stateless API)
+            return response()->json([
+                'access_token' => $username,
                 'token_type' => 'bearer',
-                'expires_in' => $ttlMinutes * 60, // seconds
             ]);
         }
 
+        // For admin credential flow, generate an ephemeral session token
+        $sessionToken = 'mzsess_' . bin2hex(random_bytes(32));
+        $ttlMinutes = self::SESSION_TOKEN_TTL_MINUTES;
+
+        \Illuminate\Support\Facades\Cache::put(
+            "api_session:{$sessionToken}",
+            $apiKey->id,
+            now()->addMinutes($ttlMinutes)
+        );
+
         return response()->json([
-            'detail' => 'Invalid credentials',
-        ], 401);
+            'access_token' => $sessionToken,
+            'token_type' => 'bearer',
+            'expires_in' => $ttlMinutes * 60, // seconds
+        ]);
     }
 
     /**
