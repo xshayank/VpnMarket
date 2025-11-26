@@ -341,14 +341,14 @@ class MarzneshinBotCompatibilityTest extends TestCase
 
         $token = $tokenResponse->json('access_token');
 
-        // Reset user (like bot's ResetUserDataUsagem function)
+        // Reset user (simulates bot's ResetUserDataUsagem function from marzneshin.php)
         $resetResponse = $this->withHeaders([
             'Authorization' => "Bearer {$token}",
             'Accept' => 'application/json',
         ])->postJson('/api/users/reset_test_user/reset');
 
         // In test environment, remote panel may fail but local update should work
-        $this->assertTrue(in_array($resetResponse->status(), [200, 500]));
+        $this->assertContains($resetResponse->status(), [200, 500], 'Reset should return 200 or 500 (remote panel failure)');
     }
 
     /**
@@ -378,7 +378,7 @@ class MarzneshinBotCompatibilityTest extends TestCase
 
         $token = $tokenResponse->json('access_token');
 
-        // Revoke sub (like bot's revoke_subm function)
+        // Revoke sub (simulates bot's revoke_subm function from marzneshin.php)
         $revokeResponse = $this->withHeaders([
             'Authorization' => "Bearer {$token}",
             'Accept' => 'application/json',
