@@ -114,6 +114,18 @@ class MarzneshinStyleController extends Controller
         $username = $request->input('username');
         $password = $request->input('password');
 
+        // Fallback: Parse form-urlencoded data from raw body if input() returns null
+        // This handles edge cases where PHP may not have parsed the request body
+        // (e.g., certain SAPI modes or proxy configurations)
+        if ((! $username || ! $password) && $request->getContent()) {
+            $contentType = $request->header('Content-Type', '');
+            if (str_contains($contentType, 'application/x-www-form-urlencoded')) {
+                parse_str($request->getContent(), $parsed);
+                $username = $username ?: ($parsed['username'] ?? null);
+                $password = $password ?: ($parsed['password'] ?? null);
+            }
+        }
+
         if (! $username || ! $password) {
             return response()->json([
                 'detail' => 'Invalid credentials',
