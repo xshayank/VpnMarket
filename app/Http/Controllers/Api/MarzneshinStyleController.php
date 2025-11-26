@@ -31,11 +31,58 @@ class MarzneshinStyleController extends Controller
      */
     protected const SESSION_TOKEN_TTL_MINUTES = 60;
 
+    /**
+     * Default expiry years for "never" expire strategy
+     * Since Eylandoo panels do not implement "never" expiry natively,
+     * we translate it to a long fixed_date (10 years by default)
+     */
+    protected const NEVER_EXPIRY_YEARS = 10;
+
     protected ApiResponseMapper $mapper;
 
     public function __construct()
     {
         $this->mapper = new ApiResponseMapper(ApiKey::STYLE_MARZNESHIN);
+    }
+
+    /**
+     * Find a config by username or prefix fallback
+     *
+     * Username behavior: our panel does not support free-form name selection.
+     * When the bot requests /api/users/{username}, if the exact external_username
+     * does not exist, we search by the stored prefix and return the matching config
+     * (or the latest) to the bot.
+     *
+     * @param \App\Models\Reseller $reseller The reseller to scope configs to
+     * @param string $username The username to search for
+     * @param int|null $panelId Optional panel ID to filter by
+     * @return ResellerConfig|null The matching config or null
+     */
+    protected function findConfigByUsernameOrPrefix($reseller, string $username, ?int $panelId = null): ?ResellerConfig
+    {
+        // Build base query scoped to reseller
+        $query = $reseller->configs();
+
+        // Apply panel filter if specified
+        if ($panelId) {
+            $query->where('panel_id', $panelId);
+        }
+
+        // First, try exact match on external_username
+        $config = (clone $query)->where('external_username', $username)->first();
+
+        if ($config) {
+            return $config;
+        }
+
+        // Fallback: search by prefix column (where bot-provided username is stored)
+        // Return the most recently created config with this prefix
+        $config = (clone $query)
+            ->where('prefix', $username)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        return $config;
     }
 
     /**
@@ -235,20 +282,21 @@ class MarzneshinStyleController extends Controller
     /**
      * Get a specific user (Marzneshin-style)
      * GET /api/users/{username}
+     *
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and returns the matching config.
      */
     public function getUser(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        // Apply panel filter for Marzneshin-style keys
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -348,13 +396,17 @@ class MarzneshinStyleController extends Controller
         $usageDuration = $request->input('usage_duration', 0);
 
         // Calculate expiry based on expire_strategy
+        // Special handling for Eylandoo panels: "never" expiry is not implemented in the panel.
+        // For expire_strategy "never", we translate to a long fixed_date.
         $expiresAt = null;
         if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
             // For start_on_first_use, use usage_duration (in seconds) from first use
             // For now, set a far future date and store the strategy in meta
-            $expiresAt = now()->addYears(10);
+            $expiresAt = now()->addYears(self::NEVER_EXPIRY_YEARS);
         } elseif ($expireStrategy === 'never') {
-            $expiresAt = now()->addYears(100);
+            // Eylandoo panels do not support "never" expiry natively.
+            // Translate to a long fixed_date (default: 10 years).
+            $expiresAt = now()->addYears(self::NEVER_EXPIRY_YEARS);
         } elseif ($request->has('expire_date')) {
             $expiresAt = \Carbon\Carbon::parse($request->input('expire_date'));
         } else {
@@ -433,9 +485,12 @@ class MarzneshinStyleController extends Controller
                 }
 
                 // Create config record
+                // Username behavior: store the API-provided username as prefix,
+                // which allows lookup by prefix when exact external_username match fails.
                 $config = ResellerConfig::create([
                     'reseller_id' => $reseller->id,
                     'external_username' => $username,
+                    'prefix' => $username, // Store API-provided username as prefix for fallback lookup
                     'name_version' => null,
                     'comment' => $request->input('note'),
                     'custom_name' => $username,
@@ -518,19 +573,21 @@ class MarzneshinStyleController extends Controller
     /**
      * Update a user (Marzneshin-style)
      * PUT /api/users/{username}
+     *
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and updates the matching config.
      */
     public function updateUser(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -563,6 +620,7 @@ class MarzneshinStyleController extends Controller
         $expiresAt = $config->expires_at;
 
         // Handle expire_date and expire_strategy
+        // Special handling for Eylandoo panels: "never" expiry is not implemented natively.
         if ($request->has('expire_date')) {
             $expiresAt = \Carbon\Carbon::parse($request->input('expire_date'));
         } elseif ($request->has('expire_strategy')) {
@@ -570,9 +628,10 @@ class MarzneshinStyleController extends Controller
             $usageDuration = $request->input('usage_duration', 0);
 
             if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
-                $expiresAt = now()->addYears(10);
+                $expiresAt = now()->addYears(self::NEVER_EXPIRY_YEARS);
             } elseif ($expireStrategy === 'never') {
-                $expiresAt = now()->addYears(100);
+                // Translate "never" to long fixed_date for Eylandoo compatibility
+                $expiresAt = now()->addYears(self::NEVER_EXPIRY_YEARS);
             }
         }
 
@@ -666,19 +725,21 @@ class MarzneshinStyleController extends Controller
     /**
      * Delete a user (Marzneshin-style)
      * DELETE /api/users/{username}
+     *
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and deletes the matching config.
      */
     public function deleteUser(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -743,19 +804,21 @@ class MarzneshinStyleController extends Controller
     /**
      * Get user subscription (Marzneshin-style)
      * GET /api/users/{username}/subscription
+     *
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and returns the matching config's subscription.
      */
     public function getUserSubscription(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -785,19 +848,21 @@ class MarzneshinStyleController extends Controller
     /**
      * Enable a user (Marzneshin-style)
      * POST /api/users/{username}/enable
+     *
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and enables the matching config.
      */
     public function enableUser(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -845,19 +910,21 @@ class MarzneshinStyleController extends Controller
     /**
      * Disable a user (Marzneshin-style)
      * POST /api/users/{username}/disable
+     *
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and disables the matching config.
      */
     public function disableUser(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -905,19 +972,21 @@ class MarzneshinStyleController extends Controller
     /**
      * Reset user traffic (Marzneshin-style)
      * POST /api/users/{username}/reset
+     *
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and resets the matching config's usage.
      */
     public function resetUser(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -1158,20 +1227,21 @@ class MarzneshinStyleController extends Controller
      * Get user usage (Marzneshin-style)
      * GET /api/users/{username}/usage
      *
-     * Returns user usage statistics
+     * Returns user usage statistics.
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and returns the matching config's usage.
      */
     public function getUserUsage(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -1203,20 +1273,21 @@ class MarzneshinStyleController extends Controller
      * Revoke user subscription (Marzneshin-style)
      * POST /api/users/{username}/revoke_subscription
      *
-     * Revokes the user's subscription URL (regenerates it)
+     * Revokes the user's subscription URL (regenerates it).
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix and revokes the matching config's subscription.
      */
     public function revokeUserSubscription(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
@@ -1248,20 +1319,21 @@ class MarzneshinStyleController extends Controller
      * Set user owner (Marzneshin-style)
      * PUT /api/users/{username}/set-owner
      *
-     * Sets or changes the owner/admin of a user
+     * Sets or changes the owner/admin of a user.
+     * Username prefix behavior: If exact external_username match is not found,
+     * searches by stored prefix.
      */
     public function setUserOwner(Request $request, string $username): JsonResponse
     {
         $apiKey = $request->attributes->get('api_key');
         $reseller = $request->attributes->get('api_reseller');
 
-        $query = $reseller->configs()->where('external_username', $username);
-
-        if ($apiKey->default_panel_id) {
-            $query->where('panel_id', $apiKey->default_panel_id);
-        }
-
-        $config = $query->first();
+        // Use prefix fallback lookup
+        $config = $this->findConfigByUsernameOrPrefix(
+            $reseller,
+            $username,
+            $apiKey->default_panel_id
+        );
 
         if (! $config) {
             return response()->json([
