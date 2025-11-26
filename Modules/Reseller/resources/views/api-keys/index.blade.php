@@ -37,6 +37,34 @@
                         </button>
                     </div>
                     <p class="mt-2 text-sm text-yellow-700">این کلید را در جای امنی ذخیره کنید. پس از بستن این صفحه، دیگر قابل مشاهده نخواهد بود.</p>
+                    
+                    {{-- Show admin credentials for Marzneshin-style keys --}}
+                    @if (session('new_api_style') === 'marzneshin' && session('new_admin_username'))
+                        <div class="mt-4 pt-4 border-t border-yellow-300">
+                            <strong class="font-bold block mb-2">اعتبارنامه ادمین (برای احراز هویت به سبک Marzneshin):</strong>
+                            <div class="space-y-2">
+                                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                    <span class="text-sm font-medium">نام کاربری:</span>
+                                    <code class="bg-gray-800 text-blue-400 px-3 py-2 rounded font-mono text-sm break-all flex-1" id="admin-username-display">{{ session('new_admin_username') }}</code>
+                                    <button type="button" onclick="copyAdminUsername()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                                        کپی
+                                    </button>
+                                </div>
+                                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                    <span class="text-sm font-medium">رمز عبور:</span>
+                                    <code class="bg-gray-800 text-purple-400 px-3 py-2 rounded font-mono text-sm break-all flex-1" id="admin-password-display">{{ session('new_admin_password') }}</code>
+                                    <button type="button" onclick="copyAdminPassword()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                                        کپی
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="mt-2 text-sm text-yellow-700">
+                                برای احراز هویت به سبک Marzneshin می‌توانید از این اعتبارنامه‌ها در <code class="bg-gray-200 px-1 rounded">POST /api/admins/token</code> استفاده کنید.
+                                <br>
+                                توکن دریافتی به مدت ۱ ساعت معتبر است.
+                            </p>
+                        </div>
+                    @endif
                 </div>
             @endif
 
@@ -327,6 +355,40 @@
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
                 alert('کلید API کپی شد!');
+            });
+        }
+
+        function copyAdminUsername() {
+            const element = document.getElementById('admin-username-display');
+            if (!element) return;
+            const text = element.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('نام کاربری ادمین کپی شد!');
+            }).catch(() => {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('نام کاربری ادمین کپی شد!');
+            });
+        }
+
+        function copyAdminPassword() {
+            const element = document.getElementById('admin-password-display');
+            if (!element) return;
+            const text = element.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('رمز عبور ادمین کپی شد!');
+            }).catch(() => {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('رمز عبور ادمین کپی شد!');
             });
         }
 

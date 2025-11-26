@@ -168,9 +168,17 @@ Route::post('users/{username}/reset', [MarzneshinStyleController::class, 'resetU
 Route::post('users/{username}/revoke_subscription', [MarzneshinStyleController::class, 'revokeUserSubscription'])
     ->middleware('api.key:users:update')
     ->where('username', '[a-zA-Z0-9_-]+');
+// Alias route for revoke_sub (maps to revokeUserSubscription)
+Route::post('users/{username}/revoke_sub', [MarzneshinStyleController::class, 'revokeUserSubscription'])
+    ->middleware('api.key:users:update')
+    ->where('username', '[a-zA-Z0-9_-]+');
 Route::put('users/{username}/set-owner', [MarzneshinStyleController::class, 'setUserOwner'])
     ->middleware('api.key:users:update')
     ->where('username', '[a-zA-Z0-9_-]+');
+
+// System stats endpoint
+Route::get('system/stats/users', [MarzneshinStyleController::class, 'systemUserStats'])
+    ->middleware('api.key:users:read');
 
 // Nodes endpoint
 Route::get('nodes', [MarzneshinStyleController::class, 'nodes'])

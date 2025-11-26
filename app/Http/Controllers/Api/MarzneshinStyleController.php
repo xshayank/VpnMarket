@@ -37,44 +37,64 @@ class MarzneshinStyleController extends Controller
      * Authenticate and get token (Marzneshin-style)
      * POST /api/admins/token
      *
-     * Authentication: username=api_key, password=api_key (same value for both)
+     * Supports two authentication methods:
+     * 1. Legacy: username=api_key, password=api_key (same value for both)
+     * 2. Admin credentials: username=admin_username, password=admin_password
+     *
+     * For admin credentials auth, returns an ephemeral session token stored in cache.
      */
     public function token(Request $request): JsonResponse
     {
         $username = $request->input('username');
         $password = $request->input('password');
 
-        // In Marzneshin-style auth, we use the API key as both username and password
-        $keyToCheck = $username ?? $password;
-
-        if (! $keyToCheck) {
+        if (! $username || ! $password) {
             return response()->json([
                 'detail' => 'Invalid credentials',
             ], 401);
         }
 
-        // Find API key by hash
-        $keyHash = ApiKey::hashKey($keyToCheck);
-        $apiKey = ApiKey::where('key_hash', $keyHash)->first();
+        // Method 1: Legacy API key flow (username === password and matches API key hash)
+        if ($username === $password) {
+            $keyHash = ApiKey::hashKey($username);
+            $apiKey = ApiKey::where('key_hash', $keyHash)->first();
 
-        if (! $apiKey || ! $apiKey->isValid()) {
-            return response()->json([
-                'detail' => 'Invalid credentials',
-            ], 401);
+            if ($apiKey && $apiKey->isValid() && $apiKey->isMarzneshinStyle()) {
+                // Return the same key as a "token" (stateless API)
+                return response()->json([
+                    'access_token' => $username,
+                    'token_type' => 'bearer',
+                ]);
+            }
         }
 
-        // Check if it's a Marzneshin-style key
-        if (! $apiKey->isMarzneshinStyle()) {
+        // Method 2: Admin credential flow
+        // Look for Marzneshin API key with matching admin_username
+        $apiKey = ApiKey::where('admin_username', $username)
+            ->where('api_style', ApiKey::STYLE_MARZNESHIN)
+            ->first();
+
+        if ($apiKey && $apiKey->isValid() && $apiKey->authenticateAdminCredentials($username, $password)) {
+            // Generate an ephemeral session token and store in cache
+            $sessionToken = 'mzsess_' . bin2hex(random_bytes(32));
+            $ttlMinutes = 60; // 1 hour validity
+
+            \Illuminate\Support\Facades\Cache::put(
+                "api_session:{$sessionToken}",
+                $apiKey->id,
+                now()->addMinutes($ttlMinutes)
+            );
+
             return response()->json([
-                'detail' => 'This endpoint requires a Marzneshin-style API key',
-            ], 403);
+                'access_token' => $sessionToken,
+                'token_type' => 'bearer',
+                'expires_in' => $ttlMinutes * 60, // seconds
+            ]);
         }
 
-        // Return the same key as a "token" (stateless API)
         return response()->json([
-            'access_token' => $keyToCheck,
-            'token_type' => 'bearer',
-        ]);
+            'detail' => 'Invalid credentials',
+        ], 401);
     }
 
     /**
@@ -257,8 +277,10 @@ class MarzneshinStyleController extends Controller
      * {
      *   "username": "string",
      *   "data_limit": 0,
+     *   "data_limit_reset_strategy": "no_reset",
      *   "expire_date": "2024-01-01T00:00:00Z",
      *   "expire_strategy": "fixed_date",
+     *   "usage_duration": 0,
      *   "service_ids": [1, 2],
      *   "note": "string"
      * }
@@ -273,8 +295,10 @@ class MarzneshinStyleController extends Controller
         $validator = Validator::make($request->all(), [
             'username' => 'required|string|max:100|regex:/^[a-zA-Z0-9_-]+$/',
             'data_limit' => 'required|integer|min:0',
-            'expire_date' => 'required|date|after:now',
+            'data_limit_reset_strategy' => 'nullable|string|max:50',
+            'expire_date' => 'nullable|date',
             'expire_strategy' => 'nullable|string|in:fixed_date,start_on_first_use,never',
+            'usage_duration' => 'nullable|integer|min:0',
             'service_ids' => 'nullable|array',
             'service_ids.*' => 'integer',
             'note' => 'nullable|string|max:200',
@@ -313,10 +337,27 @@ class MarzneshinStyleController extends Controller
         }
 
         $panelType = strtolower(trim($panel->panel_type ?? ''));
-        $expiresAt = \Carbon\Carbon::parse($request->input('expire_date'));
-        $expiresDays = now()->diffInDays($expiresAt);
         $trafficLimitBytes = (int) $request->input('data_limit');
         $username = $request->input('username');
+        $expireStrategy = $request->input('expire_strategy', 'fixed_date');
+        $usageDuration = $request->input('usage_duration', 0);
+
+        // Calculate expiry based on expire_strategy
+        $expiresAt = null;
+        if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
+            // For start_on_first_use, use usage_duration (in seconds) from first use
+            // For now, set a far future date and store the strategy in meta
+            $expiresAt = now()->addYears(10);
+        } elseif ($expireStrategy === 'never') {
+            $expiresAt = now()->addYears(100);
+        } elseif ($request->has('expire_date')) {
+            $expiresAt = \Carbon\Carbon::parse($request->input('expire_date'));
+        } else {
+            // Default to 30 days if no expire_date provided
+            $expiresAt = now()->addDays(30);
+        }
+
+        $expiresDays = now()->diffInDays($expiresAt);
 
         // Handle service_ids -> node_ids mapping for Eylandoo
         $serviceIds = $request->input('service_ids', []);
@@ -364,8 +405,27 @@ class MarzneshinStyleController extends Controller
         $config = null;
 
         try {
-            DB::transaction(function () use ($request, $reseller, $user, $panel, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $serviceIds, $username, $apiKey, &$result, &$config) {
+            DB::transaction(function () use ($request, $reseller, $user, $panel, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $serviceIds, $username, $apiKey, $expireStrategy, $usageDuration, &$result, &$config) {
                 $provisioner = new ResellerProvisioner;
+
+                // Build meta with additional fields
+                $meta = [
+                    'node_ids' => $nodeIds,
+                    'service_ids' => $serviceIds,
+                    'created_via_marzneshin_api' => true,
+                    'expire_strategy' => $expireStrategy,
+                ];
+
+                // Store data_limit_reset_strategy in meta if provided
+                if ($request->has('data_limit_reset_strategy')) {
+                    $meta['data_limit_reset_strategy'] = $request->input('data_limit_reset_strategy');
+                }
+
+                // Store usage_duration for start_on_first_use strategy
+                if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
+                    $meta['usage_duration'] = $usageDuration;
+                    $meta['activation_pending'] = true;
+                }
 
                 // Create config record
                 $config = ResellerConfig::create([
@@ -383,11 +443,7 @@ class MarzneshinStyleController extends Controller
                     'panel_id' => $panel->id,
                     'created_by' => $user->id,
                     'created_by_api_key_id' => $apiKey->id,
-                    'meta' => [
-                        'node_ids' => $nodeIds,
-                        'service_ids' => $serviceIds,
-                        'created_via_marzneshin_api' => true,
-                    ],
+                    'meta' => $meta,
                 ]);
 
                 // Provision on panel
@@ -479,7 +535,10 @@ class MarzneshinStyleController extends Controller
 
         $validator = Validator::make($request->all(), [
             'data_limit' => 'nullable|integer|min:0',
-            'expire_date' => 'nullable|date|after_or_equal:today',
+            'data_limit_reset_strategy' => 'nullable|string|max:50',
+            'expire_date' => 'nullable|date',
+            'expire_strategy' => 'nullable|string|in:fixed_date,start_on_first_use,never',
+            'usage_duration' => 'nullable|integer|min:0',
             'service_ids' => 'nullable|array',
             'service_ids.*' => 'integer',
             'note' => 'nullable|string|max:200',
@@ -496,9 +555,21 @@ class MarzneshinStyleController extends Controller
             ? (int) $request->input('data_limit')
             : $config->traffic_limit_bytes;
 
-        $expiresAt = $request->has('expire_date')
-            ? \Carbon\Carbon::parse($request->input('expire_date'))
-            : $config->expires_at;
+        $expiresAt = $config->expires_at;
+
+        // Handle expire_date and expire_strategy
+        if ($request->has('expire_date')) {
+            $expiresAt = \Carbon\Carbon::parse($request->input('expire_date'));
+        } elseif ($request->has('expire_strategy')) {
+            $expireStrategy = $request->input('expire_strategy');
+            $usageDuration = $request->input('usage_duration', 0);
+
+            if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
+                $expiresAt = now()->addYears(10);
+            } elseif ($expireStrategy === 'never') {
+                $expiresAt = now()->addYears(100);
+            }
+        }
 
         // Validation: traffic limit cannot be below current usage
         if ($trafficLimitBytes < $config->usage_bytes) {
@@ -517,6 +588,19 @@ class MarzneshinStyleController extends Controller
 
                 if ($request->has('service_ids')) {
                     $meta['service_ids'] = $request->input('service_ids');
+                }
+
+                // Store additional fields in meta
+                if ($request->has('data_limit_reset_strategy')) {
+                    $meta['data_limit_reset_strategy'] = $request->input('data_limit_reset_strategy');
+                }
+
+                if ($request->has('expire_strategy')) {
+                    $meta['expire_strategy'] = $request->input('expire_strategy');
+                }
+
+                if ($request->has('usage_duration')) {
+                    $meta['usage_duration'] = $request->input('usage_duration');
                 }
 
                 $config->update([
@@ -1359,6 +1443,56 @@ class MarzneshinStyleController extends Controller
 
         return response()->json([
             'message' => "Reset traffic for {$resetCount} users",
+        ]);
+    }
+
+    /**
+     * Get user stats (Marzneshin-style)
+     * GET /api/system/stats/users
+     *
+     * Returns aggregate counts (total, active, disabled) and total_used_traffic
+     * scoped to the reseller and default panel.
+     */
+    public function systemUserStats(Request $request): JsonResponse
+    {
+        $apiKey = $request->attributes->get('api_key');
+        $reseller = $request->attributes->get('api_reseller');
+
+        // Build query scoped to reseller's configs
+        $query = $reseller->configs();
+
+        // Filter by default panel if API key has one configured
+        if ($apiKey->default_panel_id) {
+            $query->where('panel_id', $apiKey->default_panel_id);
+        }
+
+        // Get current datetime for comparison
+        $now = now()->format('Y-m-d H:i:s');
+
+        // Get stats using a single optimized query
+        $stats = $query->selectRaw("
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+            SUM(CASE WHEN status = 'disabled' THEN 1 ELSE 0 END) as disabled,
+            SUM(usage_bytes) as total_used_traffic
+        ")->first();
+
+        // Log the action
+        ApiAuditLog::logRequest(
+            $reseller->user_id,
+            $apiKey->id,
+            'system.stats.users',
+            [
+                'api_style' => ApiKey::STYLE_MARZNESHIN,
+                'response_status' => 200,
+            ]
+        );
+
+        return response()->json([
+            'total' => (int) ($stats->total ?? 0),
+            'active' => (int) ($stats->active ?? 0),
+            'disabled' => (int) ($stats->disabled ?? 0),
+            'total_used_traffic' => (int) ($stats->total_used_traffic ?? 0),
         ]);
     }
 }

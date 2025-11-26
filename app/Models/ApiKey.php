@@ -93,6 +93,8 @@ class ApiKey extends Model
         'scopes',
         'api_style',
         'default_panel_id',
+        'admin_username',
+        'admin_password',
         'rate_limit_per_minute',
         'requests_this_minute',
         'rate_limit_reset_at',
@@ -115,6 +117,7 @@ class ApiKey extends Model
 
     protected $hidden = [
         'key_hash',
+        'admin_password',
     ];
 
     /**
@@ -339,4 +342,72 @@ class ApiKey extends Model
      * Default rate limit per minute
      */
     public const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
+
+    /**
+     * Generate a random admin username for Marzneshin-style API keys
+     */
+    public static function generateAdminUsername(): string
+    {
+        return 'mz_' . \Illuminate\Support\Str::random(10);
+    }
+
+    /**
+     * Generate a random admin password for Marzneshin-style API keys
+     */
+    public static function generateAdminPassword(): string
+    {
+        return \Illuminate\Support\Str::random(32);
+    }
+
+    /**
+     * Hash the admin password for storage using bcrypt
+     */
+    public static function hashAdminPassword(string $password): string
+    {
+        return Hash::make($password);
+    }
+
+    /**
+     * Verify admin credentials for Marzneshin-style authentication
+     *
+     * @param string $username Admin username to verify
+     * @param string $password Admin password to verify
+     * @return bool True if credentials match and API key is valid
+     */
+    public function authenticateAdminCredentials(string $username, string $password): bool
+    {
+        // Check if this API key has admin credentials set
+        if (empty($this->admin_username) || empty($this->admin_password)) {
+            return false;
+        }
+
+        // Verify username matches
+        if ($this->admin_username !== $username) {
+            return false;
+        }
+
+        // Verify password using bcrypt
+        return Hash::check($password, $this->admin_password);
+    }
+
+    /**
+     * Check if this API key has admin credentials configured
+     */
+    public function hasAdminCredentials(): bool
+    {
+        return ! empty($this->admin_username) && ! empty($this->admin_password);
+    }
+
+    /**
+     * Set admin password (automatically hashes it)
+     */
+    public function setAdminPasswordAttribute($value): void
+    {
+        // Only hash if value is not already hashed (doesn't start with $2y$)
+        if ($value && ! str_starts_with($value, '$2y$')) {
+            $this->attributes['admin_password'] = Hash::make($value);
+        } else {
+            $this->attributes['admin_password'] = $value;
+        }
+    }
 }

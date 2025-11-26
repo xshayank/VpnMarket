@@ -136,8 +136,8 @@ class ApiKeyController extends Controller
         // Generate the plaintext key
         $plaintextKey = ApiKey::generateKeyString();
 
-        // Create the API key record with hashed key
-        $apiKey = ApiKey::create([
+        // Prepare data for API key creation
+        $apiKeyData = [
             'user_id' => $user->id,
             'name' => $request->input('name'),
             'key_hash' => ApiKey::hashKey($plaintextKey),
@@ -148,7 +148,18 @@ class ApiKeyController extends Controller
             'ip_whitelist' => $request->input('ip_whitelist'),
             'expires_at' => $request->input('expires_at'),
             'revoked' => false,
-        ]);
+        ];
+
+        // Generate admin credentials for Marzneshin-style API keys
+        $plaintextAdminPassword = null;
+        if ($request->input('api_style') === ApiKey::STYLE_MARZNESHIN) {
+            $apiKeyData['admin_username'] = ApiKey::generateAdminUsername();
+            $plaintextAdminPassword = ApiKey::generateAdminPassword();
+            $apiKeyData['admin_password'] = $plaintextAdminPassword; // Will be hashed by mutator
+        }
+
+        // Create the API key record with hashed key
+        $apiKey = ApiKey::create($apiKeyData);
 
         // Log the key creation
         ApiAuditLog::logAction(
@@ -162,24 +173,34 @@ class ApiKeyController extends Controller
                 'api_style' => $apiKey->api_style,
                 'default_panel_id' => $apiKey->default_panel_id,
                 'scopes' => $apiKey->scopes,
+                'has_admin_credentials' => $apiKey->hasAdminCredentials(),
             ]
         );
 
+        // Build response data
+        $responseData = [
+            'id' => $apiKey->id,
+            'api_key' => $plaintextKey,
+            'name' => $apiKey->name,
+            'api_style' => $apiKey->api_style,
+            'style_label' => $apiKey->style_label,
+            'default_panel_id' => $apiKey->default_panel_id,
+            'scopes' => $apiKey->scopes,
+            'rate_limit_per_minute' => $apiKey->rate_limit_per_minute,
+            'ip_whitelist' => $apiKey->ip_whitelist,
+            'expires_at' => $apiKey->expires_at?->toIso8601String(),
+            'created_at' => $apiKey->created_at->toIso8601String(),
+        ];
+
+        // Add admin credentials to response for Marzneshin-style keys
+        if ($apiKey->isMarzneshinStyle() && $plaintextAdminPassword) {
+            $responseData['admin_username'] = $apiKey->admin_username;
+            $responseData['admin_password'] = $plaintextAdminPassword;
+        }
+
         // Return the plaintext key only once
         return response()->json([
-            'data' => [
-                'id' => $apiKey->id,
-                'api_key' => $plaintextKey,
-                'name' => $apiKey->name,
-                'api_style' => $apiKey->api_style,
-                'style_label' => $apiKey->style_label,
-                'default_panel_id' => $apiKey->default_panel_id,
-                'scopes' => $apiKey->scopes,
-                'rate_limit_per_minute' => $apiKey->rate_limit_per_minute,
-                'ip_whitelist' => $apiKey->ip_whitelist,
-                'expires_at' => $apiKey->expires_at?->toIso8601String(),
-                'created_at' => $apiKey->created_at->toIso8601String(),
-            ],
+            'data' => $responseData,
             'message' => 'API key created. Save this key securely - it will not be shown again.',
         ], 201);
     }
