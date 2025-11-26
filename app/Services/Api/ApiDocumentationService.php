@@ -72,18 +72,25 @@ class ApiDocumentationService
                 'type' => 'Token (obtained via /api/admins/token)',
                 'methods' => [
                     [
-                        'type' => 'Form Auth',
+                        'type' => 'Legacy API Key Auth',
                         'endpoint' => 'POST /api/admins/token',
                         'body' => 'username=<api_key>&password=<api_key>',
-                        'description' => 'Use your API key for both username and password',
+                        'description' => 'Use your API key for both username and password. Returns the API key as access_token (stateless).',
+                    ],
+                    [
+                        'type' => 'Admin Credentials Auth',
+                        'endpoint' => 'POST /api/admins/token',
+                        'body' => 'username=<admin_username>&password=<admin_password>',
+                        'description' => 'Use admin credentials generated when creating Marzneshin-style API key. Returns ephemeral session token (1 hour TTL).',
                     ],
                     [
                         'type' => 'Bearer Token',
                         'header' => 'Authorization',
-                        'format' => 'Bearer <api_key>',
+                        'format' => 'Bearer <access_token>',
+                        'description' => 'Use access_token from /api/admins/token response',
                     ],
                 ],
-                'example' => 'curl -X POST /api/admins/token -d "username=vpnm_abc&password=vpnm_abc"',
+                'example' => 'curl -X POST /api/admins/token -d "username=mz_abc123&password=your_admin_password"',
             ],
             'endpoints' => $this->getMarzneshinEndpoints(),
             'error_format' => [
@@ -188,15 +195,16 @@ class ApiDocumentationService
             [
                 'method' => 'POST',
                 'path' => '/api/admins/token',
-                'description' => 'Authenticate and get access token',
+                'description' => 'Authenticate and get access token. Supports two methods: (1) Legacy: API key as both username and password, (2) Admin credentials: admin_username and admin_password (returns ephemeral 1-hour token)',
                 'auth_required' => false,
                 'body' => [
-                    'username' => 'Your API key',
-                    'password' => 'Your API key (same as username)',
+                    'username' => 'API key or admin_username',
+                    'password' => 'API key (same as username) or admin_password',
                 ],
                 'response_example' => [
-                    'access_token' => 'vpnm_abc123...',
+                    'access_token' => 'mzsess_abc123... or vpnm_abc123...',
                     'token_type' => 'bearer',
+                    'expires_in' => '3600 (only for admin credentials auth)',
                 ],
             ],
             [
@@ -375,11 +383,29 @@ class ApiDocumentationService
                 'scope' => 'users:update',
             ],
             [
+                'method' => 'POST',
+                'path' => '/api/users/{username}/revoke_sub',
+                'description' => 'Revoke and regenerate user subscription URL (alias for revoke_subscription)',
+                'scope' => 'users:update',
+            ],
+            [
                 'method' => 'PUT',
                 'path' => '/api/users/{username}/set-owner',
                 'description' => 'Set user owner (not supported)',
                 'scope' => 'users:update',
                 'note' => 'Returns 501 Not Supported',
+            ],
+            [
+                'method' => 'GET',
+                'path' => '/api/system/stats/users',
+                'description' => 'Get aggregate user statistics (total, active, disabled counts and total_used_traffic)',
+                'scope' => 'users:read',
+                'response_example' => [
+                    'total' => 100,
+                    'active' => 80,
+                    'disabled' => 10,
+                    'total_used_traffic' => 107374182400,
+                ],
             ],
             [
                 'method' => 'GET',

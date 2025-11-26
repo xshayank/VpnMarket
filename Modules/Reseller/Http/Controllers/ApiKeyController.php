@@ -125,8 +125,8 @@ class ApiKeyController extends Controller
         // Generate the plaintext key
         $plaintextKey = ApiKey::generateKeyString();
 
-        // Create the API key record
-        $apiKey = ApiKey::create([
+        // Prepare data for API key creation
+        $apiKeyData = [
             'user_id' => $request->user()->id,
             'name' => $request->input('name'),
             'key_hash' => ApiKey::hashKey($plaintextKey),
@@ -136,7 +136,18 @@ class ApiKeyController extends Controller
             'ip_whitelist' => $ipWhitelist,
             'expires_at' => $request->input('expires_at'),
             'revoked' => false,
-        ]);
+        ];
+
+        // Generate admin credentials for Marzneshin-style API keys
+        $plaintextAdminPassword = null;
+        if ($request->input('api_style') === ApiKey::STYLE_MARZNESHIN) {
+            $apiKeyData['admin_username'] = ApiKey::generateAdminUsername();
+            $plaintextAdminPassword = ApiKey::generateAdminPassword();
+            $apiKeyData['admin_password'] = $plaintextAdminPassword; // Will be hashed by mutator
+        }
+
+        // Create the API key record
+        $apiKey = ApiKey::create($apiKeyData);
 
         // Log the key creation
         ApiAuditLog::logAction(
@@ -150,12 +161,24 @@ class ApiKeyController extends Controller
                 'api_style' => $apiKey->api_style,
                 'default_panel_id' => $apiKey->default_panel_id,
                 'scopes' => $apiKey->scopes,
+                'has_admin_credentials' => $apiKey->hasAdminCredentials(),
             ]
         );
 
-        return redirect()->route('reseller.api-keys.index')
+        // Build redirect with flash data
+        $redirect = redirect()->route('reseller.api-keys.index')
             ->with('success', 'API key created successfully. Save this key - it will not be shown again!')
             ->with('new_api_key', $plaintextKey);
+
+        // Add admin credentials to flash data for Marzneshin-style keys
+        if ($request->input('api_style') === ApiKey::STYLE_MARZNESHIN && $plaintextAdminPassword) {
+            $redirect = $redirect
+                ->with('new_admin_username', $apiKey->admin_username)
+                ->with('new_admin_password', $plaintextAdminPassword)
+                ->with('new_api_style', ApiKey::STYLE_MARZNESHIN);
+        }
+
+        return $redirect;
     }
 
     /**

@@ -24,9 +24,19 @@ class AuthenticateApiKey
             return $this->errorResponse('API key is required', 401, $request);
         }
 
-        // Find API key by hash
-        $keyHash = ApiKey::hashKey($token);
-        $apiKey = ApiKey::where('key_hash', $keyHash)->first();
+        $apiKey = null;
+
+        // Check if token is an ephemeral session token (mzsess_...)
+        if (str_starts_with($token, 'mzsess_')) {
+            $apiKey = $this->resolveSessionToken($token);
+            if (! $apiKey) {
+                return $this->errorResponse('Invalid or expired session token', 401, $request);
+            }
+        } else {
+            // Find API key by hash (legacy method)
+            $keyHash = ApiKey::hashKey($token);
+            $apiKey = ApiKey::where('key_hash', $keyHash)->first();
+        }
 
         if (! $apiKey) {
             return $this->errorResponse('Invalid API key', 401, $request);
@@ -119,6 +129,20 @@ class AuthenticateApiKey
         $request->attributes->set('api_start_time', $startTime);
 
         return $next($request);
+    }
+
+    /**
+     * Resolve an ephemeral session token to an API key
+     */
+    protected function resolveSessionToken(string $token): ?ApiKey
+    {
+        $apiKeyId = \Illuminate\Support\Facades\Cache::get("api_session:{$token}");
+
+        if (! $apiKeyId) {
+            return null;
+        }
+
+        return ApiKey::find($apiKeyId);
     }
 
     /**
