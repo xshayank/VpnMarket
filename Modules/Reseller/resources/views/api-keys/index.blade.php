@@ -57,6 +57,40 @@
                         @enderror
                     </div>
 
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="api_style" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نوع API</label>
+                            <select name="api_style" id="api_style" required
+                                class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                @foreach ($styles as $style)
+                                    <option value="{{ $style }}" {{ old('api_style') === $style ? 'selected' : '' }}>
+                                        {{ $style === 'falco' ? 'Falco (Native)' : ucfirst($style) }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('api_style')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div id="default_panel_container" style="{{ old('api_style') === 'marzneshin' ? '' : 'display: none;' }}">
+                            <label for="default_panel_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">پنل پیش‌فرض</label>
+                            <select name="default_panel_id" id="default_panel_id"
+                                class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">انتخاب پنل...</option>
+                                @foreach ($panels as $panel)
+                                    <option value="{{ $panel->id }}" {{ old('default_panel_id') == $panel->id ? 'selected' : '' }}>
+                                        {{ $panel->name }} ({{ $panel->panel_type }})
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">برای نوع Marzneshin انتخاب پنل الزامی است</p>
+                            @error('default_panel_id')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    </div>
+
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">دسترسی‌ها (Scopes)</label>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -295,5 +329,25 @@
                 alert('کلید API کپی شد!');
             });
         }
+
+        // Toggle default panel visibility based on API style
+        document.addEventListener('DOMContentLoaded', function() {
+            const apiStyleSelect = document.getElementById('api_style');
+            const defaultPanelContainer = document.getElementById('default_panel_container');
+            const defaultPanelSelect = document.getElementById('default_panel_id');
+
+            function toggleDefaultPanel() {
+                if (apiStyleSelect.value === 'marzneshin') {
+                    defaultPanelContainer.style.display = '';
+                    defaultPanelSelect.setAttribute('required', 'required');
+                } else {
+                    defaultPanelContainer.style.display = 'none';
+                    defaultPanelSelect.removeAttribute('required');
+                }
+            }
+
+            apiStyleSelect.addEventListener('change', toggleDefaultPanel);
+            toggleDefaultPanel(); // Initial state
+        });
     </script>
 </x-app-layout>
