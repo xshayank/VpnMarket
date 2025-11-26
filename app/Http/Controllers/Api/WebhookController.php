@@ -23,7 +23,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -34,7 +34,7 @@ class WebhookController extends Controller
             ->select([
                 'id', 'name', 'url', 'events', 'is_active',
                 'failure_count', 'last_triggered_at', 'last_success_at',
-                'last_failure_at', 'created_at'
+                'last_failure_at', 'created_at',
             ])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -51,7 +51,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -62,7 +62,7 @@ class WebhookController extends Controller
             'name' => 'required|string|max:100',
             'url' => 'required|url|max:500',
             'events' => 'required|array|min:1',
-            'events.*' => 'string|in:' . implode(',', ApiWebhook::ALL_EVENTS),
+            'events.*' => 'string|in:'.implode(',', ApiWebhook::ALL_EVENTS),
             'api_key_id' => 'nullable|exists:api_keys,id',
         ]);
 
@@ -80,7 +80,7 @@ class WebhookController extends Controller
                 ->where('id', $request->input('api_key_id'))
                 ->exists();
 
-            if (!$keyBelongsToUser) {
+            if (! $keyBelongsToUser) {
                 return response()->json([
                     'error' => true,
                     'message' => 'The specified API key does not belong to you',
@@ -140,7 +140,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -151,7 +151,7 @@ class WebhookController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$webhook) {
+        if (! $webhook) {
             return response()->json([
                 'error' => true,
                 'message' => 'Webhook not found',
@@ -182,7 +182,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -193,7 +193,7 @@ class WebhookController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$webhook) {
+        if (! $webhook) {
             return response()->json([
                 'error' => true,
                 'message' => 'Webhook not found',
@@ -204,7 +204,7 @@ class WebhookController extends Controller
             'name' => 'nullable|string|max:100',
             'url' => 'nullable|url|max:500',
             'events' => 'nullable|array|min:1',
-            'events.*' => 'string|in:' . implode(',', ApiWebhook::ALL_EVENTS),
+            'events.*' => 'string|in:'.implode(',', ApiWebhook::ALL_EVENTS),
             'is_active' => 'nullable|boolean',
         ]);
 
@@ -221,7 +221,7 @@ class WebhookController extends Controller
             'url' => $request->input('url'),
             'events' => $request->input('events'),
             'is_active' => $request->input('is_active'),
-        ], fn($v) => $v !== null);
+        ], fn ($v) => $v !== null);
 
         // If re-enabling, reset failure count
         if (isset($updateData['is_active']) && $updateData['is_active'] === true) {
@@ -260,7 +260,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -271,7 +271,7 @@ class WebhookController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$webhook) {
+        if (! $webhook) {
             return response()->json([
                 'error' => true,
                 'message' => 'Webhook not found',
@@ -302,7 +302,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -313,7 +313,7 @@ class WebhookController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$webhook) {
+        if (! $webhook) {
             return response()->json([
                 'error' => true,
                 'message' => 'Webhook not found',
@@ -348,7 +348,7 @@ class WebhookController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -359,7 +359,7 @@ class WebhookController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$webhook) {
+        if (! $webhook) {
             return response()->json([
                 'error' => true,
                 'message' => 'Webhook not found',
@@ -376,7 +376,7 @@ class WebhookController extends Controller
         ]);
 
         // Restore original active state
-        if (!$wasActive) {
+        if (! $wasActive) {
             $webhook->is_active = false;
             $webhook->save();
         }
@@ -400,7 +400,7 @@ class WebhookController extends Controller
     public function events(): JsonResponse
     {
         return response()->json([
-            'data' => array_map(fn($event) => [
+            'data' => array_map(fn ($event) => [
                 'name' => $event,
                 'description' => $this->getEventDescription($event),
             ], ApiWebhook::ALL_EVENTS),
@@ -412,7 +412,7 @@ class WebhookController extends Controller
      */
     protected function getEventDescription(string $event): string
     {
-        return match($event) {
+        return match ($event) {
             ApiWebhook::EVENT_CONFIG_CREATED => 'Triggered when a new config/user is created',
             ApiWebhook::EVENT_CONFIG_UPDATED => 'Triggered when a config/user is updated',
             ApiWebhook::EVENT_CONFIG_DELETED => 'Triggered when a config/user is deleted',

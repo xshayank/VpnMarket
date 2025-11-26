@@ -20,7 +20,7 @@ class AuthenticateApiKey
         $startTime = microtime(true);
         $token = $this->extractToken($request);
 
-        if (!$token) {
+        if (! $token) {
             return $this->errorResponse('API key is required', 401, $request);
         }
 
@@ -28,18 +28,19 @@ class AuthenticateApiKey
         $keyHash = ApiKey::hashKey($token);
         $apiKey = ApiKey::where('key_hash', $keyHash)->first();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return $this->errorResponse('Invalid API key', 401, $request);
         }
 
         // Check if key is valid (not revoked, not expired)
-        if (!$apiKey->isValid()) {
+        if (! $apiKey->isValid()) {
             $reason = $apiKey->revoked ? 'API key has been revoked' : 'API key has expired';
+
             return $this->errorResponse($reason, 401, $request, $apiKey);
         }
 
         // Check IP whitelist
-        if (!$apiKey->isIpAllowed($request->ip())) {
+        if (! $apiKey->isIpAllowed($request->ip())) {
             ApiAuditLog::logRequest(
                 $apiKey->user_id,
                 $apiKey->id,
@@ -50,6 +51,7 @@ class AuthenticateApiKey
                     'metadata' => ['denied_ip' => $request->ip()],
                 ]
             );
+
             return $this->errorResponse('IP address not allowed', 403, $request, $apiKey);
         }
 
@@ -66,8 +68,8 @@ class AuthenticateApiKey
                 ]
             );
 
-            $retryAfter = $apiKey->rate_limit_reset_at 
-                ? $apiKey->rate_limit_reset_at->diffInSeconds(now()) 
+            $retryAfter = $apiKey->rate_limit_reset_at
+                ? $apiKey->rate_limit_reset_at->diffInSeconds(now())
                 : 60;
 
             return $this->errorResponse(
@@ -81,17 +83,17 @@ class AuthenticateApiKey
 
         // Check if reseller has API enabled
         $user = $apiKey->user;
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return $this->errorResponse('API access is not enabled for this account', 403, $request, $apiKey);
         }
 
         // Check if reseller is active
-        if (!$user->reseller->isActive()) {
+        if (! $user->reseller->isActive()) {
             return $this->errorResponse('Reseller account is not active', 403, $request, $apiKey);
         }
 
         // Check required scope if specified
-        if ($scope !== null && !$apiKey->hasScope($scope)) {
+        if ($scope !== null && ! $apiKey->hasScope($scope)) {
             ApiAuditLog::logRequest(
                 $apiKey->user_id,
                 $apiKey->id,
@@ -102,6 +104,7 @@ class AuthenticateApiKey
                     'metadata' => ['required_scope' => $scope, 'key_scopes' => $apiKey->scopes],
                 ]
             );
+
             return $this->errorResponse("Missing required scope: {$scope}", 403, $request, $apiKey);
         }
 
@@ -153,9 +156,11 @@ class AuthenticateApiKey
                     if (str_starts_with($username, 'vpnm_')) {
                         return $username;
                     }
+
                     // If neither looks like our key, try password first
                     return $password ?: $username;
                 }
+
                 return $credentials;
             }
         }
@@ -169,7 +174,7 @@ class AuthenticateApiKey
     protected function extractBearerToken(Request $request): ?string
     {
         $header = $request->header('Authorization', '');
-        
+
         if (str_starts_with($header, 'Bearer ')) {
             return substr($header, 7);
         }

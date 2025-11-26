@@ -43,7 +43,7 @@ class ApiAuditLog extends Model
         array $metadata = []
     ): self {
         $request = request();
-        
+
         $requestMetadata = array_merge([
             'ip' => $request?->ip(),
             'user_agent' => $request?->userAgent(),
@@ -69,7 +69,7 @@ class ApiAuditLog extends Model
         array $options = []
     ): self {
         $request = request();
-        
+
         $requestMetadata = array_merge([
             'ip' => $request?->ip(),
             'user_agent' => $request?->userAgent(),

@@ -12,6 +12,7 @@ use App\Models\ResellerConfig;
 class ApiResponseMapper
 {
     protected string $style;
+
     protected ?Panel $panel;
 
     public function __construct(string $style = ApiKey::STYLE_FALCO, ?Panel $panel = null)
@@ -58,7 +59,7 @@ class ApiResponseMapper
 
     /**
      * Map config to Marzneshin-compatible format
-     * 
+     *
      * Marzneshin user format:
      * {
      *   "username": "string",
@@ -117,7 +118,7 @@ class ApiResponseMapper
             return 'expired';
         }
 
-        return match($status) {
+        return match ($status) {
             'active' => 'active',
             'disabled', 'suspended' => 'disabled',
             'deleted' => 'disabled',
@@ -131,6 +132,7 @@ class ApiResponseMapper
     protected function extractServiceIds(ResellerConfig $config): array
     {
         $meta = $config->meta ?? [];
+
         return $meta['service_ids'] ?? [];
     }
 
@@ -161,7 +163,7 @@ class ApiResponseMapper
 
     /**
      * Map an Eylandoo node to Marzneshin service format
-     * 
+     *
      * Eylandoo node: {"id": 1, "name": "Node Name"}
      * Marzneshin service: {"id": 1, "name": "Service Name"}
      */
@@ -215,7 +217,7 @@ class ApiResponseMapper
      */
     protected function mapPanelTypeToMarzneshin(string $panelType): string
     {
-        return match(strtolower($panelType)) {
+        return match (strtolower($panelType)) {
             'marzneshin' => 'marzneshin',
             'eylandoo' => 'marzneshin', // Map Eylandoo as Marzneshin-compatible
             default => 'custom',
@@ -244,7 +246,7 @@ class ApiResponseMapper
             'message' => $message,
         ];
 
-        if (!empty($details)) {
+        if (! empty($details)) {
             $error['errors'] = $details;
         }
 
@@ -253,14 +255,14 @@ class ApiResponseMapper
 
     /**
      * Map error to Marzneshin format
-     * 
+     *
      * Marzneshin error format:
      * {"detail": "Error message"} for simple errors
      * {"detail": [{"loc": ["body", "field"], "msg": "message", "type": "error_type"}]} for validation
      */
     protected function mapErrorToMarzneshin(string $message, int $status, array $details): array
     {
-        if (!empty($details)) {
+        if (! empty($details)) {
             // Validation error format
             $formattedDetails = [];
             foreach ($details as $field => $messages) {
@@ -273,6 +275,7 @@ class ApiResponseMapper
                     ];
                 }
             }
+
             return ['detail' => $formattedDetails];
         }
 
@@ -333,6 +336,7 @@ class ApiResponseMapper
     public function setStyle(string $style): self
     {
         $this->style = $style;
+
         return $this;
     }
 
@@ -342,6 +346,7 @@ class ApiResponseMapper
     public function setPanel(?Panel $panel): self
     {
         $this->panel = $panel;
+
         return $this;
     }
 }

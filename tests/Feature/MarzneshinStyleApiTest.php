@@ -15,9 +15,13 @@ class MarzneshinStyleApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
+
     protected Reseller $reseller;
+
     protected Panel $panel;
+
     protected ApiKey $apiKey;
+
     protected string $plaintextKey;
 
     protected function setUp(): void
@@ -26,7 +30,7 @@ class MarzneshinStyleApiTest extends TestCase
 
         // Create user with reseller
         $this->user = User::factory()->create();
-        
+
         $this->panel = Panel::create([
             'name' => 'Test Panel',
             'url' => 'https://test-panel.example.com',
@@ -144,7 +148,7 @@ class MarzneshinStyleApiTest extends TestCase
         // Verify Marzneshin-style field names
         $items = $response->json('items');
         $this->assertNotEmpty($items);
-        
+
         $user = $items[0];
         $this->assertArrayHasKey('username', $user);
         $this->assertArrayHasKey('status', $user);
@@ -225,7 +229,7 @@ class MarzneshinStyleApiTest extends TestCase
 
         $response->assertJsonStructure(['detail']);
 
-        // Falco-style key should get Falco-format errors  
+        // Falco-style key should get Falco-format errors
         $response = $this->withHeaders([
             'Authorization' => "Bearer {$falcoKey}",
         ])->getJson('/api/v1/configs/nonexistent');
@@ -291,7 +295,7 @@ class MarzneshinStyleApiTest extends TestCase
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonPath('errors.api_style', fn($errors) => count($errors) > 0);
+            ->assertJsonPath('errors.api_style', fn ($errors) => count($errors) > 0);
     }
 
     public function test_subscription_endpoint_returns_url(): void

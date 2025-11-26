@@ -10,7 +10,6 @@ use App\Models\Plan;
 use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
 use App\Services\Api\ApiResponseMapper;
-use App\Services\ConfigNameGenerator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +19,7 @@ use Modules\Reseller\Services\ResellerProvisioner;
 
 /**
  * Marzneshin-compatible API Controller
- * 
+ *
  * This controller provides Marzneshin-style API endpoints for clients
  * that expect the Marzneshin API format. Endpoints respond in Marzneshin
  * format regardless of the underlying panel type (Marzneshin, Eylandoo, etc.)
@@ -37,7 +36,7 @@ class MarzneshinStyleController extends Controller
     /**
      * Authenticate and get token (Marzneshin-style)
      * POST /api/admins/token
-     * 
+     *
      * Authentication: username=api_key, password=api_key (same value for both)
      */
     public function token(Request $request): JsonResponse
@@ -48,7 +47,7 @@ class MarzneshinStyleController extends Controller
         // In Marzneshin-style auth, we use the API key as both username and password
         $keyToCheck = $username ?? $password;
 
-        if (!$keyToCheck) {
+        if (! $keyToCheck) {
             return response()->json([
                 'detail' => 'Invalid credentials',
             ], 401);
@@ -58,14 +57,14 @@ class MarzneshinStyleController extends Controller
         $keyHash = ApiKey::hashKey($keyToCheck);
         $apiKey = ApiKey::where('key_hash', $keyHash)->first();
 
-        if (!$apiKey || !$apiKey->isValid()) {
+        if (! $apiKey || ! $apiKey->isValid()) {
             return response()->json([
                 'detail' => 'Invalid credentials',
             ], 401);
         }
 
         // Check if it's a Marzneshin-style key
-        if (!$apiKey->isMarzneshinStyle()) {
+        if (! $apiKey->isMarzneshinStyle()) {
             return response()->json([
                 'detail' => 'This endpoint requires a Marzneshin-style API key',
             ], 403);
@@ -81,7 +80,7 @@ class MarzneshinStyleController extends Controller
     /**
      * List services (Marzneshin-style)
      * GET /api/services
-     * 
+     *
      * For Eylandoo panels: returns nodes mapped as services
      * For Marzneshin panels: returns services natively
      */
@@ -93,7 +92,7 @@ class MarzneshinStyleController extends Controller
         // Get the default panel for this API key
         $panel = $apiKey->defaultPanel;
 
-        if (!$panel) {
+        if (! $panel) {
             return response()->json([
                 'detail' => 'No default panel configured for this API key',
             ], 400);
@@ -113,7 +112,7 @@ class MarzneshinStyleController extends Controller
                 : null;
 
             if ($allowedNodeIds) {
-                $nodes = array_filter($nodes, fn($n) => in_array($n['id'] ?? 0, $allowedNodeIds));
+                $nodes = array_filter($nodes, fn ($n) => in_array($n['id'] ?? 0, $allowedNodeIds));
             }
 
             $response = $this->mapper->mapNodesToServices(array_values($nodes));
@@ -129,7 +128,7 @@ class MarzneshinStyleController extends Controller
                 : null;
 
             if ($allowedServiceIds) {
-                $services = array_filter($services, fn($s) => in_array($s['id'] ?? 0, $allowedServiceIds));
+                $services = array_filter($services, fn ($s) => in_array($s['id'] ?? 0, $allowedServiceIds));
             }
 
             $response = [
@@ -226,7 +225,7 @@ class MarzneshinStyleController extends Controller
 
         $config = $query->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'detail' => 'User not found',
             ], 404);
@@ -253,7 +252,7 @@ class MarzneshinStyleController extends Controller
     /**
      * Create a user (Marzneshin-style)
      * POST /api/users
-     * 
+     *
      * Request body:
      * {
      *   "username": "string",
@@ -289,7 +288,7 @@ class MarzneshinStyleController extends Controller
         }
 
         // Validate reseller can create configs
-        if (!$reseller->supportsConfigManagement()) {
+        if (! $reseller->supportsConfigManagement()) {
             return response()->json([
                 'detail' => 'This feature is only available for traffic-based and wallet-based resellers',
             ], 403);
@@ -297,7 +296,7 @@ class MarzneshinStyleController extends Controller
 
         // Get the panel
         $panel = $apiKey->defaultPanel;
-        if (!$panel) {
+        if (! $panel) {
             return response()->json([
                 'detail' => 'No default panel configured for this API key',
             ], 400);
@@ -336,7 +335,7 @@ class MarzneshinStyleController extends Controller
 
             if ($allowedNodeIds) {
                 foreach ($nodeIds as $nodeId) {
-                    if (!in_array($nodeId, $allowedNodeIds)) {
+                    if (! in_array($nodeId, $allowedNodeIds)) {
                         return response()->json([
                             'detail' => 'One or more selected services (nodes) are not allowed for your account',
                         ], 403);
@@ -352,7 +351,7 @@ class MarzneshinStyleController extends Controller
 
             if ($allowedServiceIds) {
                 foreach ($serviceIds as $serviceId) {
-                    if (!in_array($serviceId, $allowedServiceIds)) {
+                    if (! in_array($serviceId, $allowedServiceIds)) {
                         return response()->json([
                             'detail' => 'One or more selected services are not allowed for your account',
                         ], 403);
@@ -365,7 +364,7 @@ class MarzneshinStyleController extends Controller
         $config = null;
 
         try {
-            DB::transaction(function () use ($request, $reseller, $user, $panel, $panelType, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $serviceIds, $username, $apiKey, &$result, &$config) {
+            DB::transaction(function () use ($request, $reseller, $user, $panel, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $serviceIds, $username, $apiKey, &$result, &$config) {
                 $provisioner = new ResellerProvisioner;
 
                 // Create config record
@@ -472,7 +471,7 @@ class MarzneshinStyleController extends Controller
 
         $config = $query->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'detail' => 'User not found',
             ], 404);
@@ -504,7 +503,7 @@ class MarzneshinStyleController extends Controller
         // Validation: traffic limit cannot be below current usage
         if ($trafficLimitBytes < $config->usage_bytes) {
             return response()->json([
-                'detail' => 'Traffic limit cannot be set below current usage (' . round($config->usage_bytes / (1024 * 1024 * 1024), 2) . ' GB)',
+                'detail' => 'Traffic limit cannot be set below current usage ('.round($config->usage_bytes / (1024 * 1024 * 1024), 2).' GB)',
             ], 422);
         }
 
@@ -571,6 +570,7 @@ class MarzneshinStyleController extends Controller
         );
 
         $config->refresh();
+
         return response()->json($this->mapper->mapConfig($config));
     }
 
@@ -591,7 +591,7 @@ class MarzneshinStyleController extends Controller
 
         $config = $query->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'detail' => 'User not found',
             ], 404);
@@ -610,13 +610,13 @@ class MarzneshinStyleController extends Controller
                         $config->panel_user_id
                     );
 
-                    if (!$success) {
+                    if (! $success) {
                         $remoteFailed = true;
                     }
                 }
             } catch (\Exception $e) {
                 $remoteFailed = true;
-                Log::error("Marzneshin API: Exception deleting user: " . $e->getMessage());
+                Log::error('Marzneshin API: Exception deleting user: '.$e->getMessage());
             }
         }
 
@@ -668,7 +668,7 @@ class MarzneshinStyleController extends Controller
 
         $config = $query->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'detail' => 'User not found',
             ], 404);
@@ -710,7 +710,7 @@ class MarzneshinStyleController extends Controller
 
         $config = $query->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'detail' => 'User not found',
             ], 404);
@@ -733,7 +733,7 @@ class MarzneshinStyleController extends Controller
 
         } catch (\Exception $e) {
             return response()->json([
-                'detail' => 'Failed to enable user: ' . $e->getMessage(),
+                'detail' => 'Failed to enable user: '.$e->getMessage(),
             ], 500);
         }
 
@@ -770,7 +770,7 @@ class MarzneshinStyleController extends Controller
 
         $config = $query->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'detail' => 'User not found',
             ], 404);
@@ -793,7 +793,7 @@ class MarzneshinStyleController extends Controller
 
         } catch (\Exception $e) {
             return response()->json([
-                'detail' => 'Failed to disable user: ' . $e->getMessage(),
+                'detail' => 'Failed to disable user: '.$e->getMessage(),
             ], 500);
         }
 
@@ -830,7 +830,7 @@ class MarzneshinStyleController extends Controller
 
         $config = $query->first();
 
-        if (!$config) {
+        if (! $config) {
             return response()->json([
                 'detail' => 'User not found',
             ], 404);
@@ -853,7 +853,7 @@ class MarzneshinStyleController extends Controller
 
         } catch (\Exception $e) {
             return response()->json([
-                'detail' => 'Failed to reset user: ' . $e->getMessage(),
+                'detail' => 'Failed to reset user: '.$e->getMessage(),
             ], 500);
         }
 
@@ -876,7 +876,7 @@ class MarzneshinStyleController extends Controller
     /**
      * List nodes (Marzneshin-style)
      * GET /api/nodes
-     * 
+     *
      * For Eylandoo panels: returns nodes
      * For Marzneshin panels: returns empty (Marzneshin doesn't expose nodes the same way)
      */
@@ -887,7 +887,7 @@ class MarzneshinStyleController extends Controller
 
         $panel = $apiKey->defaultPanel;
 
-        if (!$panel) {
+        if (! $panel) {
             return response()->json([
                 'detail' => 'No default panel configured for this API key',
             ], 400);
@@ -905,7 +905,7 @@ class MarzneshinStyleController extends Controller
                 : null;
 
             if ($allowedNodeIds) {
-                $nodes = array_filter($nodes, fn($n) => in_array($n['id'] ?? 0, $allowedNodeIds));
+                $nodes = array_filter($nodes, fn ($n) => in_array($n['id'] ?? 0, $allowedNodeIds));
             }
 
             $response = [

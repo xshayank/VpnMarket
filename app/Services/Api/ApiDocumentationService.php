@@ -382,7 +382,7 @@ class ApiDocumentationService
     {
         $scopes = ApiKey::getScopesForStyle($style);
 
-        return array_map(fn($scope) => [
+        return array_map(fn ($scope) => [
             'name' => $scope,
             'description' => $this->getScopeDescription($scope),
         ], $scopes);
@@ -393,7 +393,7 @@ class ApiDocumentationService
      */
     protected function getScopeDescription(string $scope): string
     {
-        return match($scope) {
+        return match ($scope) {
             'configs:create' => 'Create new configs/users',
             'configs:read' => 'Read configs/users',
             'configs:update' => 'Update configs/users',
@@ -416,7 +416,7 @@ class ApiDocumentationService
      */
     public function getWebhookEvents(): array
     {
-        return array_map(fn($event) => [
+        return array_map(fn ($event) => [
             'name' => $event,
             'description' => $this->getWebhookEventDescription($event),
         ], ApiWebhook::ALL_EVENTS);
@@ -427,7 +427,7 @@ class ApiDocumentationService
      */
     protected function getWebhookEventDescription(string $event): string
     {
-        return match($event) {
+        return match ($event) {
             ApiWebhook::EVENT_CONFIG_CREATED => 'Triggered when a new config/user is created',
             ApiWebhook::EVENT_CONFIG_UPDATED => 'Triggered when a config/user is updated',
             ApiWebhook::EVENT_CONFIG_DELETED => 'Triggered when a config/user is deleted',
@@ -448,8 +448,8 @@ class ApiDocumentationService
     public function exportOpenApiSpec(string $style = ApiKey::STYLE_FALCO): array
     {
         $baseUrl = $style === ApiKey::STYLE_MARZNESHIN ? '/api' : '/api/v1';
-        $title = $style === ApiKey::STYLE_MARZNESHIN 
-            ? 'VPNMarket Marzneshin-Compatible API' 
+        $title = $style === ApiKey::STYLE_MARZNESHIN
+            ? 'VPNMarket Marzneshin-Compatible API'
             : 'VPNMarket Falco API';
 
         return [
@@ -460,7 +460,7 @@ class ApiDocumentationService
                 'description' => $this->getDocumentation($style)['description'],
             ],
             'servers' => [
-                ['url' => config('app.url') . $baseUrl],
+                ['url' => config('app.url').$baseUrl],
             ],
             'security' => [
                 ['bearerAuth' => []],
@@ -482,8 +482,8 @@ class ApiDocumentationService
      */
     protected function getOpenApiPaths(string $style): array
     {
-        $endpoints = $style === ApiKey::STYLE_MARZNESHIN 
-            ? $this->getMarzneshinEndpoints() 
+        $endpoints = $style === ApiKey::STYLE_MARZNESHIN
+            ? $this->getMarzneshinEndpoints()
             : $this->getFalcoEndpoints();
 
         $paths = [];
@@ -491,7 +491,7 @@ class ApiDocumentationService
             $path = $endpoint['path'];
             $method = strtolower($endpoint['method']);
 
-            if (!isset($paths[$path])) {
+            if (! isset($paths[$path])) {
                 $paths[$path] = [];
             }
 

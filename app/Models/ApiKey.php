@@ -16,6 +16,7 @@ class ApiKey extends Model
      * API Style constants
      */
     public const STYLE_FALCO = 'falco';
+
     public const STYLE_MARZNESHIN = 'marzneshin';
 
     public const ALL_STYLES = [
@@ -27,17 +28,29 @@ class ApiKey extends Model
      * Available API scopes
      */
     public const SCOPE_CONFIGS_CREATE = 'configs:create';
+
     public const SCOPE_CONFIGS_READ = 'configs:read';
+
     public const SCOPE_CONFIGS_UPDATE = 'configs:update';
+
     public const SCOPE_CONFIGS_DELETE = 'configs:delete';
+
     public const SCOPE_PANELS_LIST = 'panels:list';
+
     public const SCOPE_SERVICES_LIST = 'services:list';
+
     public const SCOPE_USERS_CREATE = 'users:create';
+
     public const SCOPE_USERS_READ = 'users:read';
+
     public const SCOPE_USERS_UPDATE = 'users:update';
+
     public const SCOPE_USERS_DELETE = 'users:delete';
+
     public const SCOPE_SUBSCRIPTION_READ = 'subscription:read';
+
     public const SCOPE_NODES_LIST = 'nodes:list';
+
     public const SCOPE_WEBHOOKS_MANAGE = 'webhooks:manage';
 
     public const ALL_SCOPES = [
@@ -70,6 +83,7 @@ class ApiKey extends Model
     ];
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected $fillable = [
@@ -108,7 +122,7 @@ class ApiKey extends Model
      */
     public static function generateKeyString(): string
     {
-        return 'vpnm_' . bin2hex(random_bytes(32));
+        return 'vpnm_'.bin2hex(random_bytes(32));
     }
 
     /**
@@ -145,6 +159,7 @@ class ApiKey extends Model
                 return true;
             }
         }
+
         return false;
     }
 
@@ -263,11 +278,12 @@ class ApiKey extends Model
     public function incrementRequestCount(): void
     {
         // Reset counter if the minute has passed
-        if (!$this->rate_limit_reset_at || $this->rate_limit_reset_at->isPast()) {
+        if (! $this->rate_limit_reset_at || $this->rate_limit_reset_at->isPast()) {
             $this->update([
                 'requests_this_minute' => 1,
                 'rate_limit_reset_at' => now()->addMinute(),
             ]);
+
             return;
         }
 
@@ -279,7 +295,7 @@ class ApiKey extends Model
      */
     public function getRemainingRequests(): int
     {
-        if (!$this->rate_limit_reset_at || $this->rate_limit_reset_at->isPast()) {
+        if (! $this->rate_limit_reset_at || $this->rate_limit_reset_at->isPast()) {
             return $this->rate_limit_per_minute;
         }
 
@@ -291,7 +307,7 @@ class ApiKey extends Model
      */
     public function getStyleLabelAttribute(): string
     {
-        return match($this->api_style) {
+        return match ($this->api_style) {
             self::STYLE_MARZNESHIN => 'Marzneshin',
             self::STYLE_FALCO => 'Falco (Native)',
             default => ucfirst($this->api_style ?? 'Unknown'),
@@ -300,12 +316,12 @@ class ApiKey extends Model
 
     /**
      * Get style-specific scopes
-     * 
+     *
      * Note: For Marzneshin style, returns the Marzneshin scope names.
      * For Falco style, returns all available scopes.
      * Both return an array of scope strings.
-     * 
-     * @param string $style The API style (falco or marzneshin)
+     *
+     * @param  string  $style  The API style (falco or marzneshin)
      * @return array Array of scope name strings
      */
     public static function getScopesForStyle(string $style): array

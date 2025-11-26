@@ -17,12 +17,13 @@ use Illuminate\Http\Response;
 class ApiDocumentationController extends Controller
 {
     protected ApiDocumentationService $documentationService;
+
     protected PanelHealthService $healthService;
 
     public function __construct()
     {
-        $this->documentationService = new ApiDocumentationService();
-        $this->healthService = new PanelHealthService();
+        $this->documentationService = new ApiDocumentationService;
+        $this->healthService = new PanelHealthService;
     }
 
     /**
@@ -32,10 +33,10 @@ class ApiDocumentationController extends Controller
     {
         $style = $request->input('style', ApiKey::STYLE_FALCO);
 
-        if (!in_array($style, ApiKey::ALL_STYLES)) {
+        if (! in_array($style, ApiKey::ALL_STYLES)) {
             return response()->json([
                 'error' => true,
-                'message' => 'Invalid API style. Available: ' . implode(', ', ApiKey::ALL_STYLES),
+                'message' => 'Invalid API style. Available: '.implode(', ', ApiKey::ALL_STYLES),
             ], 400);
         }
 
@@ -70,12 +71,13 @@ class ApiDocumentationController extends Controller
         $style = $request->input('style');
 
         if ($style) {
-            if (!in_array($style, ApiKey::ALL_STYLES)) {
+            if (! in_array($style, ApiKey::ALL_STYLES)) {
                 return response()->json([
                     'error' => true,
                     'message' => 'Invalid API style',
                 ], 400);
             }
+
             return response()->json([
                 'data' => $this->documentationService->getScopes($style),
             ]);
@@ -96,7 +98,7 @@ class ApiDocumentationController extends Controller
     {
         $style = $request->input('style', ApiKey::STYLE_FALCO);
 
-        if (!in_array($style, ApiKey::ALL_STYLES)) {
+        if (! in_array($style, ApiKey::ALL_STYLES)) {
             return response()->json([
                 'error' => true,
                 'message' => 'Invalid API style',
@@ -115,7 +117,7 @@ class ApiDocumentationController extends Controller
     {
         $style = $request->input('style', ApiKey::STYLE_FALCO);
 
-        if (!in_array($style, ApiKey::ALL_STYLES)) {
+        if (! in_array($style, ApiKey::ALL_STYLES)) {
             return response('Invalid API style', 400);
         }
 
@@ -123,7 +125,7 @@ class ApiDocumentationController extends Controller
 
         return response($markdown, 200, [
             'Content-Type' => 'text/markdown',
-            'Content-Disposition' => 'attachment; filename="api-documentation-' . $style . '.md"',
+            'Content-Disposition' => 'attachment; filename="api-documentation-'.$style.'.md"',
         ]);
     }
 
@@ -154,7 +156,7 @@ class ApiDocumentationController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -196,7 +198,7 @@ class ApiDocumentationController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -208,7 +210,7 @@ class ApiDocumentationController extends Controller
         // Verify access to panel
         $hasAccess = $reseller->hasPanelAccess($panelId) || $reseller->primary_panel_id == $panelId;
 
-        if (!$hasAccess) {
+        if (! $hasAccess) {
             return response()->json([
                 'error' => true,
                 'message' => 'You do not have access to this panel',
@@ -216,7 +218,7 @@ class ApiDocumentationController extends Controller
         }
 
         $panel = \App\Models\Panel::find($panelId);
-        if (!$panel) {
+        if (! $panel) {
             return response()->json([
                 'error' => true,
                 'message' => 'Panel not found',
@@ -237,7 +239,7 @@ class ApiDocumentationController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',

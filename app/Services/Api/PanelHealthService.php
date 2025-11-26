@@ -36,7 +36,7 @@ class PanelHealthService
      */
     public function checkHealth(Panel $panel): array
     {
-        $cacheKey = self::CACHE_PREFIX . $panel->id;
+        $cacheKey = self::CACHE_PREFIX.$panel->id;
 
         // Return cached result if available
         $cached = Cache::get($cacheKey);
@@ -57,7 +57,7 @@ class PanelHealthService
      */
     public function refreshHealth(Panel $panel): array
     {
-        $cacheKey = self::CACHE_PREFIX . $panel->id;
+        $cacheKey = self::CACHE_PREFIX.$panel->id;
         Cache::forget($cacheKey);
 
         return $this->checkHealth($panel);
@@ -146,7 +146,7 @@ class PanelHealthService
 
             $loggedIn = $service->login();
 
-            if (!$loggedIn) {
+            if (! $loggedIn) {
                 return [
                     'healthy' => false,
                     'details' => ['error' => 'Authentication failed'],
@@ -238,7 +238,7 @@ class PanelHealthService
      */
     public function clearCache(Panel $panel): void
     {
-        Cache::forget(self::CACHE_PREFIX . $panel->id);
+        Cache::forget(self::CACHE_PREFIX.$panel->id);
     }
 
     /**

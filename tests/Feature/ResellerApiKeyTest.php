@@ -14,7 +14,9 @@ class ResellerApiKeyTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
+
     protected Reseller $reseller;
+
     protected Panel $panel;
 
     protected function setUp(): void
@@ -23,7 +25,7 @@ class ResellerApiKeyTest extends TestCase
 
         // Create user with reseller
         $this->user = User::factory()->create();
-        
+
         $this->panel = Panel::create([
             'name' => 'Test Panel',
             'url' => 'https://test-panel.example.com',
@@ -121,7 +123,7 @@ class ResellerApiKeyTest extends TestCase
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonPath('errors.default_panel_id', fn($errors) => count($errors) > 0);
+            ->assertJsonPath('errors.default_panel_id', fn ($errors) => count($errors) > 0);
     }
 
     public function test_cannot_create_api_key_without_api_enabled(): void

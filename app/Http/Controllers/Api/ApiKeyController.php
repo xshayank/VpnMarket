@@ -20,7 +20,7 @@ class ApiKeyController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -32,7 +32,7 @@ class ApiKeyController extends Controller
             ->select([
                 'id', 'name', 'scopes', 'api_style', 'default_panel_id',
                 'rate_limit_per_minute', 'ip_whitelist', 'expires_at',
-                'last_used_at', 'revoked', 'created_at'
+                'last_used_at', 'revoked', 'created_at',
             ])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -69,7 +69,7 @@ class ApiKeyController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -79,9 +79,9 @@ class ApiKeyController extends Controller
         // Build validation rules based on API style
         $rules = [
             'name' => 'required|string|max:100',
-            'api_style' => 'required|string|in:' . implode(',', ApiKey::ALL_STYLES),
+            'api_style' => 'required|string|in:'.implode(',', ApiKey::ALL_STYLES),
             'scopes' => 'required|array|min:1',
-            'scopes.*' => 'string|in:' . implode(',', ApiKey::ALL_SCOPES),
+            'scopes.*' => 'string|in:'.implode(',', ApiKey::ALL_SCOPES),
             'expires_at' => 'nullable|date|after:now',
             'ip_whitelist' => 'nullable|array',
             'ip_whitelist.*' => 'ip',
@@ -114,7 +114,7 @@ class ApiKeyController extends Controller
                 || $reseller->panel_id == $panelId
                 || $reseller->primary_panel_id == $panelId;
 
-            if (!$hasAccess) {
+            if (! $hasAccess) {
                 return response()->json([
                     'error' => true,
                     'message' => 'You do not have access to the selected panel',
@@ -192,7 +192,7 @@ class ApiKeyController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -203,7 +203,7 @@ class ApiKeyController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json([
                 'error' => true,
                 'message' => 'API key not found',
@@ -213,7 +213,7 @@ class ApiKeyController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'nullable|string|max:100',
             'scopes' => 'nullable|array|min:1',
-            'scopes.*' => 'string|in:' . implode(',', ApiKey::ALL_SCOPES),
+            'scopes.*' => 'string|in:'.implode(',', ApiKey::ALL_SCOPES),
             'default_panel_id' => 'nullable|exists:panels,id',
             'rate_limit_per_minute' => 'nullable|integer|min:1|max:1000',
             'ip_whitelist' => 'nullable|array',
@@ -237,7 +237,7 @@ class ApiKeyController extends Controller
                 || $reseller->panel_id == $panelId
                 || $reseller->primary_panel_id == $panelId;
 
-            if (!$hasAccess) {
+            if (! $hasAccess) {
                 return response()->json([
                     'error' => true,
                     'message' => 'You do not have access to the selected panel',
@@ -251,7 +251,7 @@ class ApiKeyController extends Controller
             'default_panel_id' => $request->input('default_panel_id'),
             'rate_limit_per_minute' => $request->input('rate_limit_per_minute'),
             'ip_whitelist' => $request->input('ip_whitelist'),
-        ], fn($v) => $v !== null);
+        ], fn ($v) => $v !== null);
 
         $apiKey->update($updateData);
 
@@ -289,7 +289,7 @@ class ApiKeyController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -300,7 +300,7 @@ class ApiKeyController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json([
                 'error' => true,
                 'message' => 'API key not found',
@@ -350,7 +350,7 @@ class ApiKeyController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -361,7 +361,7 @@ class ApiKeyController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json([
                 'error' => true,
                 'message' => 'API key not found',
@@ -400,7 +400,7 @@ class ApiKeyController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -411,7 +411,7 @@ class ApiKeyController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json([
                 'error' => true,
                 'message' => 'API key not found',
@@ -442,7 +442,7 @@ class ApiKeyController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',
@@ -453,7 +453,7 @@ class ApiKeyController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json([
                 'error' => true,
                 'message' => 'API key not found',
@@ -475,7 +475,7 @@ class ApiKeyController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->reseller || !$user->reseller->api_enabled) {
+        if (! $user || ! $user->reseller || ! $user->reseller->api_enabled) {
             return response()->json([
                 'error' => true,
                 'message' => 'API access is not enabled for your account',

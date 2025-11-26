@@ -19,14 +19,23 @@ class ApiWebhook extends Model
      * Webhook event types
      */
     public const EVENT_CONFIG_CREATED = 'config.created';
+
     public const EVENT_CONFIG_UPDATED = 'config.updated';
+
     public const EVENT_CONFIG_DELETED = 'config.deleted';
+
     public const EVENT_USER_CREATED = 'user.created';
+
     public const EVENT_USER_UPDATED = 'user.updated';
+
     public const EVENT_USER_DELETED = 'user.deleted';
+
     public const EVENT_PANEL_STATUS_CHANGED = 'panel.status_changed';
+
     public const EVENT_API_KEY_USAGE_SPIKE = 'api_key.usage_spike';
+
     public const EVENT_API_KEY_ERROR_SPIKE = 'api_key.error_spike';
+
     public const EVENT_RATE_LIMIT_HIT = 'rate_limit.hit';
 
     public const ALL_EVENTS = [
@@ -99,7 +108,7 @@ class ApiWebhook extends Model
      */
     public function trigger(string $event, array $data): bool
     {
-        if (!$this->is_active || !$this->isSubscribedTo($event)) {
+        if (! $this->is_active || ! $this->isSubscribedTo($event)) {
             return false;
         }
 
@@ -130,10 +139,12 @@ class ApiWebhook extends Model
                     'failure_count' => 0,
                     'last_error' => null,
                 ]);
+
                 return true;
             }
 
             $this->recordFailure("HTTP {$response->status()}: {$response->body()}");
+
             return false;
 
         } catch (\Exception $e) {
@@ -143,6 +154,7 @@ class ApiWebhook extends Model
                 'error' => $e->getMessage(),
             ]);
             $this->recordFailure($e->getMessage());
+
             return false;
         }
     }
