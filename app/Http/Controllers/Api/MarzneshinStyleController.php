@@ -26,6 +26,11 @@ use Modules\Reseller\Services\ResellerProvisioner;
  */
 class MarzneshinStyleController extends Controller
 {
+    /**
+     * Session token TTL in minutes (1 hour by default)
+     */
+    protected const SESSION_TOKEN_TTL_MINUTES = 60;
+
     protected ApiResponseMapper $mapper;
 
     public function __construct()
@@ -77,7 +82,7 @@ class MarzneshinStyleController extends Controller
         if ($apiKey && $apiKey->isValid() && $apiKey->authenticateAdminCredentials($username, $password)) {
             // Generate an ephemeral session token and store in cache
             $sessionToken = 'mzsess_' . bin2hex(random_bytes(32));
-            $ttlMinutes = 60; // 1 hour validity
+            $ttlMinutes = self::SESSION_TOKEN_TTL_MINUTES;
 
             \Illuminate\Support\Facades\Cache::put(
                 "api_session:{$sessionToken}",
