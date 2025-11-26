@@ -392,7 +392,7 @@ class MarzneshinAdminCredentialsTest extends TestCase
         ]);
 
         $response->assertStatus(401)
-            ->assertJsonPath('detail', 'Invalid credentials');
+            ->assertJsonPath('detail', 'API key has been revoked');
     }
 
     public function test_expired_api_key_cannot_authenticate_with_admin_credentials(): void
@@ -406,7 +406,57 @@ class MarzneshinAdminCredentialsTest extends TestCase
         ]);
 
         $response->assertStatus(401)
-            ->assertJsonPath('detail', 'Invalid credentials');
+            ->assertJsonPath('detail', 'API key has expired');
+    }
+
+    public function test_api_disabled_reseller_cannot_authenticate(): void
+    {
+        // Disable API for the reseller
+        $this->reseller->update(['api_enabled' => false]);
+
+        $response = $this->postJson('/api/admins/token', [
+            'username' => $this->adminUsername,
+            'password' => $this->adminPassword,
+        ]);
+
+        $response->assertStatus(403)
+            ->assertJsonPath('detail', 'API access is not enabled for this account');
+    }
+
+    public function test_inactive_reseller_cannot_authenticate(): void
+    {
+        // Suspend the reseller
+        $this->reseller->update(['status' => 'suspended']);
+
+        $response = $this->postJson('/api/admins/token', [
+            'username' => $this->adminUsername,
+            'password' => $this->adminPassword,
+        ]);
+
+        $response->assertStatus(403)
+            ->assertJsonPath('detail', 'Reseller account is not active');
+    }
+
+    public function test_falco_style_api_key_cannot_use_marzneshin_token_endpoint(): void
+    {
+        // Create a Falco-style API key
+        $falcoKey = ApiKey::generateKeyString();
+        ApiKey::create([
+            'user_id' => $this->user->id,
+            'name' => 'Falco Style Key',
+            'key_hash' => ApiKey::hashKey($falcoKey),
+            'api_style' => ApiKey::STYLE_FALCO,
+            'scopes' => ['configs:read'],
+            'revoked' => false,
+        ]);
+
+        $response = $this->postJson('/api/admins/token', [
+            'username' => $falcoKey,
+            'password' => $falcoKey,
+        ]);
+
+        $response->assertStatus(403)
+            ->assertJsonPath('detail', 'This endpoint requires a Marzneshin-style API key');
     }
 
     public function test_username_prefix_lookup_fallback_finds_config_by_prefix(): void
