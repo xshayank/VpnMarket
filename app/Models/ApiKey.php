@@ -12,6 +12,9 @@ class ApiKey extends Model
 {
     use HasUuids;
 
+    public const STYLE_FALCO = 'falco';
+    public const STYLE_MARZNESHIN = 'marzneshin';
+
     /**
      * Available API scopes
      */
@@ -41,6 +44,8 @@ class ApiKey extends Model
         'expires_at',
         'last_used_at',
         'revoked',
+        'api_style',
+        'default_panel_id',
     ];
 
     protected $casts = [
@@ -49,6 +54,7 @@ class ApiKey extends Model
         'expires_at' => 'datetime',
         'last_used_at' => 'datetime',
         'revoked' => 'boolean',
+        'default_panel_id' => 'integer',
     ];
 
     protected $hidden = [
@@ -152,6 +158,11 @@ class ApiKey extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function defaultPanel(): BelongsTo
+    {
+        return $this->belongsTo(Panel::class, 'default_panel_id');
     }
 
     public function auditLogs(): HasMany

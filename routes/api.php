@@ -24,7 +24,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 Route::middleware(['auth'])->prefix('keys')->group(function () {
     Route::get('/', [ApiKeyController::class, 'index']);
     Route::post('/', [ApiKeyController::class, 'store']);
+    Route::put('/{id}', [ApiKeyController::class, 'update']);
     Route::post('/{id}/revoke', [ApiKeyController::class, 'revoke']);
+    Route::post('/{id}/rotate', [ApiKeyController::class, 'rotate']);
     Route::delete('/{id}', [ApiKeyController::class, 'destroy']);
 });
 
