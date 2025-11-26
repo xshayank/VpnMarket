@@ -46,6 +46,20 @@ class MarzneshinStyleController extends Controller
     }
 
     /**
+     * Get the far future expiry date for "never" expire strategy
+     *
+     * Eylandoo panels do not implement "never" expiry natively, so we translate
+     * it to a long fixed_date. This method provides a consistent implementation
+     * across all endpoints that need this translation.
+     *
+     * @return \Carbon\Carbon The far future expiry date
+     */
+    protected function getNeverExpiryDate(): \Carbon\Carbon
+    {
+        return now()->addYears(self::NEVER_EXPIRY_YEARS);
+    }
+
+    /**
      * Find a config by username or prefix fallback
      *
      * Username behavior: our panel does not support free-form name selection.
@@ -402,11 +416,11 @@ class MarzneshinStyleController extends Controller
         if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
             // For start_on_first_use, use usage_duration (in seconds) from first use
             // For now, set a far future date and store the strategy in meta
-            $expiresAt = now()->addYears(self::NEVER_EXPIRY_YEARS);
+            $expiresAt = $this->getNeverExpiryDate();
         } elseif ($expireStrategy === 'never') {
             // Eylandoo panels do not support "never" expiry natively.
             // Translate to a long fixed_date (default: 10 years).
-            $expiresAt = now()->addYears(self::NEVER_EXPIRY_YEARS);
+            $expiresAt = $this->getNeverExpiryDate();
         } elseif ($request->has('expire_date')) {
             $expiresAt = \Carbon\Carbon::parse($request->input('expire_date'));
         } else {
@@ -628,10 +642,10 @@ class MarzneshinStyleController extends Controller
             $usageDuration = $request->input('usage_duration', 0);
 
             if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
-                $expiresAt = now()->addYears(self::NEVER_EXPIRY_YEARS);
+                $expiresAt = $this->getNeverExpiryDate();
             } elseif ($expireStrategy === 'never') {
                 // Translate "never" to long fixed_date for Eylandoo compatibility
-                $expiresAt = now()->addYears(self::NEVER_EXPIRY_YEARS);
+                $expiresAt = $this->getNeverExpiryDate();
             }
         }
 
