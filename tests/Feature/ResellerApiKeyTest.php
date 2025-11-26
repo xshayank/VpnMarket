@@ -53,6 +53,7 @@ class ResellerApiKeyTest extends TestCase
 
         $response = $this->postJson('/api/keys', [
             'name' => 'Test API Key',
+            'api_style' => 'falco',
             'scopes' => ['configs:create', 'configs:read'],
         ]);
 
@@ -62,6 +63,7 @@ class ResellerApiKeyTest extends TestCase
                     'id',
                     'api_key',
                     'name',
+                    'api_style',
                     'scopes',
                     'created_at',
                 ],
@@ -71,7 +73,55 @@ class ResellerApiKeyTest extends TestCase
         $this->assertDatabaseHas('api_keys', [
             'user_id' => $this->user->id,
             'name' => 'Test API Key',
+            'api_style' => 'falco',
         ]);
+    }
+
+    public function test_can_create_marzneshin_style_api_key(): void
+    {
+        $this->actingAs($this->user);
+
+        $response = $this->postJson('/api/keys', [
+            'name' => 'Marzneshin API Key',
+            'api_style' => 'marzneshin',
+            'default_panel_id' => $this->panel->id,
+            'scopes' => ['users:create', 'users:read', 'services:list'],
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonStructure([
+                'data' => [
+                    'id',
+                    'api_key',
+                    'name',
+                    'api_style',
+                    'default_panel_id',
+                    'scopes',
+                    'created_at',
+                ],
+                'message',
+            ]);
+
+        $this->assertDatabaseHas('api_keys', [
+            'user_id' => $this->user->id,
+            'name' => 'Marzneshin API Key',
+            'api_style' => 'marzneshin',
+            'default_panel_id' => $this->panel->id,
+        ]);
+    }
+
+    public function test_marzneshin_style_requires_default_panel(): void
+    {
+        $this->actingAs($this->user);
+
+        $response = $this->postJson('/api/keys', [
+            'name' => 'Marzneshin API Key',
+            'api_style' => 'marzneshin',
+            'scopes' => ['users:create', 'users:read'],
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('errors.default_panel_id', fn($errors) => count($errors) > 0);
     }
 
     public function test_cannot_create_api_key_without_api_enabled(): void

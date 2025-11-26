@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\ConfigController;
+use App\Http\Controllers\Api\MarzneshinStyleController;
 use App\Http\Controllers\Api\PanelController;
 use App\Http\Controllers\AuditLogsController;
 use App\Http\Controllers\PanelsController;
@@ -24,11 +25,19 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 Route::middleware(['auth'])->prefix('keys')->group(function () {
     Route::get('/', [ApiKeyController::class, 'index']);
     Route::post('/', [ApiKeyController::class, 'store']);
+    Route::put('/{id}', [ApiKeyController::class, 'update']);
     Route::post('/{id}/revoke', [ApiKeyController::class, 'revoke']);
+    Route::post('/{id}/rotate', [ApiKeyController::class, 'rotate']);
+    Route::get('/{id}/analytics', [ApiKeyController::class, 'analytics']);
     Route::delete('/{id}', [ApiKeyController::class, 'destroy']);
+    Route::get('/panels', [ApiKeyController::class, 'availablePanels']);
 });
 
-// Reseller API routes (API key authenticated)
+/*
+|--------------------------------------------------------------------------
+| Falco (Native) Style API Routes - /api/v1/...
+|--------------------------------------------------------------------------
+*/
 Route::middleware(['api.key'])->prefix('v1')->group(function () {
     // Panels - list available panels
     Route::get('panels', [PanelController::class, 'index'])
@@ -46,3 +55,46 @@ Route::middleware(['api.key'])->prefix('v1')->group(function () {
     Route::delete('configs/{name}', [ConfigController::class, 'destroy'])
         ->middleware('api.key:configs:delete');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Marzneshin-Compatible Style API Routes
+|--------------------------------------------------------------------------
+| These routes mimic Marzneshin's API format for drop-in compatibility
+| with existing Marzneshin clients and tools.
+|--------------------------------------------------------------------------
+*/
+
+// Token endpoint (public - uses form auth like Marzneshin)
+Route::post('admins/token', [MarzneshinStyleController::class, 'token']);
+
+// Marzneshin-style routes (API key authenticated with specific scopes)
+// Services endpoint (maps Eylandoo nodes to Marzneshin services)
+Route::get('services', [MarzneshinStyleController::class, 'services'])
+    ->middleware('api.key:services:list');
+
+// Users endpoint (Marzneshin-style user management)
+Route::get('users', [MarzneshinStyleController::class, 'users'])
+    ->middleware('api.key:users:read');
+Route::get('users/{username}', [MarzneshinStyleController::class, 'getUser'])
+    ->middleware('api.key:users:read');
+Route::post('users', [MarzneshinStyleController::class, 'createUser'])
+    ->middleware('api.key:users:create');
+Route::put('users/{username}', [MarzneshinStyleController::class, 'updateUser'])
+    ->middleware('api.key:users:update');
+Route::delete('users/{username}', [MarzneshinStyleController::class, 'deleteUser'])
+    ->middleware('api.key:users:delete');
+
+// User actions
+Route::get('users/{username}/subscription', [MarzneshinStyleController::class, 'getUserSubscription'])
+    ->middleware('api.key:subscription:read');
+Route::post('users/{username}/enable', [MarzneshinStyleController::class, 'enableUser'])
+    ->middleware('api.key:users:update');
+Route::post('users/{username}/disable', [MarzneshinStyleController::class, 'disableUser'])
+    ->middleware('api.key:users:update');
+Route::post('users/{username}/reset', [MarzneshinStyleController::class, 'resetUser'])
+    ->middleware('api.key:users:update');
+
+// Nodes endpoint
+Route::get('nodes', [MarzneshinStyleController::class, 'nodes'])
+    ->middleware('api.key:nodes:list');
