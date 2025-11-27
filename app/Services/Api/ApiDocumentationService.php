@@ -203,8 +203,8 @@ class ApiDocumentationService
                 ],
                 'response_example' => [
                     'access_token' => 'mzsess_abc123... or vpnm_abc123...',
+                    'is_sudo' => true,
                     'token_type' => 'bearer',
-                    'expires_in' => '3600 (only for admin credentials auth)',
                 ],
             ],
             [
@@ -398,13 +398,15 @@ class ApiDocumentationService
             [
                 'method' => 'GET',
                 'path' => '/api/system/stats/users',
-                'description' => 'Get aggregate user statistics (total, active, disabled counts and total_used_traffic)',
+                'description' => 'Get aggregate user statistics in Marzneshin format (total, active, on_hold, expired, limited, online)',
                 'scope' => 'users:read',
                 'response_example' => [
                     'total' => 100,
                     'active' => 80,
-                    'disabled' => 10,
-                    'total_used_traffic' => 107374182400,
+                    'on_hold' => 0,
+                    'expired' => 10,
+                    'limited' => 5,
+                    'online' => 0,
                 ],
             ],
             [

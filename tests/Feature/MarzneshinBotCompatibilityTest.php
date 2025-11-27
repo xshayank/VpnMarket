@@ -102,13 +102,16 @@ class MarzneshinBotCompatibilityTest extends TestCase
             'Content-Type' => 'application/x-www-form-urlencoded',
         ]);
 
+        // Marzneshin format: access_token, is_sudo, token_type (no expires_in)
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'access_token',
+                'is_sudo',
                 'token_type',
-                'expires_in',
             ])
-            ->assertJsonPath('token_type', 'bearer');
+            ->assertJsonPath('token_type', 'bearer')
+            ->assertJsonPath('is_sudo', true)
+            ->assertJsonMissing(['expires_in']);
 
         $token = $response->json('access_token');
         $this->assertStringStartsWith('mzsess_', $token);
@@ -127,12 +130,16 @@ class MarzneshinBotCompatibilityTest extends TestCase
             'Content-Type' => 'application/x-www-form-urlencoded',
         ]);
 
+        // Marzneshin format: access_token, is_sudo, token_type (no expires_in)
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'access_token',
+                'is_sudo',
                 'token_type',
             ])
-            ->assertJsonPath('token_type', 'bearer');
+            ->assertJsonPath('token_type', 'bearer')
+            ->assertJsonPath('is_sudo', true)
+            ->assertJsonMissing(['expires_in']);
 
         // Legacy flow returns the key itself
         $this->assertEquals($this->plaintextKey, $response->json('access_token'));
@@ -219,13 +226,17 @@ class MarzneshinBotCompatibilityTest extends TestCase
             'Accept' => 'application/json',
         ])->getJson('/api/system/stats/users');
 
+        // Marzneshin format: total, active, on_hold, expired, limited, online
         $statsResponse->assertStatus(200)
             ->assertJsonStructure([
                 'total',
                 'active',
-                'disabled',
-                'total_used_traffic',
-            ]);
+                'on_hold',
+                'expired',
+                'limited',
+                'online',
+            ])
+            ->assertJsonMissing(['disabled', 'total_used_traffic']);
     }
 
     /**
@@ -306,10 +317,13 @@ class MarzneshinBotCompatibilityTest extends TestCase
         $controller = new \App\Http\Controllers\Api\MarzneshinStyleController();
         $response = $controller->token($request);
 
-        // Verify the response
+        // Verify the response (Marzneshin format: access_token, is_sudo, token_type)
         $this->assertEquals(200, $response->getStatusCode());
         $data = json_decode($response->getContent(), true);
         $this->assertArrayHasKey('access_token', $data);
+        $this->assertArrayHasKey('is_sudo', $data);
+        $this->assertTrue($data['is_sudo']);
+        $this->assertArrayNotHasKey('expires_in', $data);
         $this->assertStringStartsWith('mzsess_', $data['access_token']);
     }
 

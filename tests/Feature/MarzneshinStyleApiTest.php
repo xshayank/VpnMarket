@@ -81,12 +81,16 @@ class MarzneshinStyleApiTest extends TestCase
             'password' => $this->plaintextKey,
         ]);
 
+        // Marzneshin format: access_token, is_sudo, token_type (no expires_in)
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'access_token',
+                'is_sudo',
                 'token_type',
             ])
-            ->assertJsonPath('token_type', 'bearer');
+            ->assertJsonPath('token_type', 'bearer')
+            ->assertJsonPath('is_sudo', true)
+            ->assertJsonMissing(['expires_in']);
     }
 
     public function test_token_endpoint_rejects_invalid_credentials(): void
