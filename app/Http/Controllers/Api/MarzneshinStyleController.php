@@ -219,8 +219,10 @@ class MarzneshinStyleController extends Controller
         // Return appropriate token based on auth flow
         if ($isLegacyFlow) {
             // Return the same key as a "token" (stateless API)
+            // Marzneshin format: includes is_sudo, no expires_in
             return response()->json([
                 'access_token' => $username,
+                'is_sudo' => true,
                 'token_type' => 'bearer',
             ]);
         }
@@ -235,10 +237,11 @@ class MarzneshinStyleController extends Controller
             now()->addMinutes($ttlMinutes)
         );
 
+        // Marzneshin format: includes is_sudo, no expires_in
         return response()->json([
             'access_token' => $sessionToken,
+            'is_sudo' => true,
             'token_type' => 'bearer',
-            'expires_in' => $ttlMinutes * 60, // seconds
         ]);
     }
 
@@ -1620,7 +1623,8 @@ class MarzneshinStyleController extends Controller
      * Get user stats (Marzneshin-style)
      * GET /api/system/stats/users
      *
-     * Returns aggregate counts (total, active, disabled) and total_used_traffic
+     * Returns aggregate counts in Marzneshin format:
+     * total, active, on_hold, expired, limited, online
      * scoped to the reseller and default panel.
      */
     public function systemUserStats(Request $request): JsonResponse
@@ -1640,12 +1644,20 @@ class MarzneshinStyleController extends Controller
         $now = now()->format('Y-m-d H:i:s');
 
         // Get stats using a single optimized query
+        // Match exact Marzneshin response format:
+        // - total: COUNT(*)
+        // - active: COUNT(status='active')
+        // - on_hold: COUNT(status='on_hold') - currently not used, return 0
+        // - expired: COUNT(expires_at < now())
+        // - limited: COUNT(usage_bytes >= traffic_limit_bytes AND traffic_limit_bytes > 0)
+        // - online: 0 (placeholder until real-time metrics are integrated)
         $stats = $query->selectRaw("
             COUNT(*) as total,
             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
-            SUM(CASE WHEN status = 'disabled' THEN 1 ELSE 0 END) as disabled,
-            SUM(usage_bytes) as total_used_traffic
-        ")->first();
+            SUM(CASE WHEN status = 'on_hold' THEN 1 ELSE 0 END) as on_hold,
+            SUM(CASE WHEN expires_at < ? THEN 1 ELSE 0 END) as expired,
+            SUM(CASE WHEN usage_bytes >= traffic_limit_bytes AND traffic_limit_bytes > 0 THEN 1 ELSE 0 END) as limited
+        ", [$now])->first();
 
         // Log the action
         ApiAuditLog::logRequest(
@@ -1658,11 +1670,14 @@ class MarzneshinStyleController extends Controller
             ]
         );
 
+        // Return Marzneshin-compatible response format
         return response()->json([
             'total' => (int) ($stats->total ?? 0),
             'active' => (int) ($stats->active ?? 0),
-            'disabled' => (int) ($stats->disabled ?? 0),
-            'total_used_traffic' => (int) ($stats->total_used_traffic ?? 0),
+            'on_hold' => (int) ($stats->on_hold ?? 0),
+            'expired' => (int) ($stats->expired ?? 0),
+            'limited' => (int) ($stats->limited ?? 0),
+            'online' => 0, // Placeholder until real-time metrics are integrated
         ]);
     }
 }

@@ -91,13 +91,16 @@ class MarzneshinAdminCredentialsTest extends TestCase
             'password' => $this->adminPassword,
         ]);
 
+        // Marzneshin format: access_token, is_sudo, token_type (no expires_in)
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'access_token',
+                'is_sudo',
                 'token_type',
-                'expires_in',
             ])
-            ->assertJsonPath('token_type', 'bearer');
+            ->assertJsonPath('token_type', 'bearer')
+            ->assertJsonPath('is_sudo', true)
+            ->assertJsonMissing(['expires_in']);
 
         // Verify the token starts with mzsess_ (ephemeral session token)
         $token = $response->json('access_token');
@@ -115,12 +118,16 @@ class MarzneshinAdminCredentialsTest extends TestCase
             'password' => $this->plaintextKey,
         ]);
 
+        // Marzneshin format: access_token, is_sudo, token_type (no expires_in)
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'access_token',
+                'is_sudo',
                 'token_type',
             ])
-            ->assertJsonPath('token_type', 'bearer');
+            ->assertJsonPath('token_type', 'bearer')
+            ->assertJsonPath('is_sudo', true)
+            ->assertJsonMissing(['expires_in']);
 
         // Verify the token is the same as the API key (stateless)
         $token = $response->json('access_token');
@@ -214,7 +221,8 @@ class MarzneshinAdminCredentialsTest extends TestCase
 
     public function test_system_user_stats_endpoint_returns_counts(): void
     {
-        // Create some configs with different statuses
+        // Create some configs with different statuses to test all stats fields
+        // Active user (not expired, not limited)
         ResellerConfig::create([
             'reseller_id' => $this->reseller->id,
             'external_username' => 'active_user_1',
@@ -227,6 +235,7 @@ class MarzneshinAdminCredentialsTest extends TestCase
             'created_by' => $this->user->id,
         ]);
 
+        // Active user (not expired, not limited)
         ResellerConfig::create([
             'reseller_id' => $this->reseller->id,
             'external_username' => 'active_user_2',
@@ -239,11 +248,25 @@ class MarzneshinAdminCredentialsTest extends TestCase
             'created_by' => $this->user->id,
         ]);
 
+        // Expired user
         ResellerConfig::create([
             'reseller_id' => $this->reseller->id,
-            'external_username' => 'disabled_user',
+            'external_username' => 'expired_user',
             'traffic_limit_bytes' => 10737418240,
             'usage_bytes' => 536870912, // 0.5GB
+            'expires_at' => now()->subDays(5), // Expired 5 days ago
+            'status' => 'disabled',
+            'panel_type' => 'marzneshin',
+            'panel_id' => $this->panel->id,
+            'created_by' => $this->user->id,
+        ]);
+
+        // Limited user (usage >= traffic limit)
+        ResellerConfig::create([
+            'reseller_id' => $this->reseller->id,
+            'external_username' => 'limited_user',
+            'traffic_limit_bytes' => 5368709120, // 5GB
+            'usage_bytes' => 5368709120, // 5GB - exactly at limit
             'expires_at' => now()->addDays(30),
             'status' => 'disabled',
             'panel_type' => 'marzneshin',
@@ -255,20 +278,25 @@ class MarzneshinAdminCredentialsTest extends TestCase
             'Authorization' => "Bearer {$this->plaintextKey}",
         ])->getJson('/api/system/stats/users');
 
+        // Marzneshin format: total, active, on_hold, expired, limited, online
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'total',
                 'active',
-                'disabled',
-                'total_used_traffic',
-            ]);
+                'on_hold',
+                'expired',
+                'limited',
+                'online',
+            ])
+            ->assertJsonMissing(['disabled', 'total_used_traffic']);
 
-        // Verify counts
-        $this->assertEquals(3, $response->json('total'));
+        // Verify counts based on Marzneshin format
+        $this->assertEquals(4, $response->json('total'));
         $this->assertEquals(2, $response->json('active'));
-        $this->assertEquals(1, $response->json('disabled'));
-        // Total traffic: 1GB + 2GB + 0.5GB = 3.5GB = 3758096384 bytes
-        $this->assertEquals(3758096384, $response->json('total_used_traffic'));
+        $this->assertEquals(0, $response->json('on_hold')); // No on_hold status in our system
+        $this->assertEquals(1, $response->json('expired')); // 1 user with expires_at < now
+        $this->assertEquals(1, $response->json('limited')); // 1 user with usage >= limit
+        $this->assertEquals(0, $response->json('online'));  // Placeholder
     }
 
     public function test_create_user_with_expire_strategy_fixed_date_and_service_ids(): void

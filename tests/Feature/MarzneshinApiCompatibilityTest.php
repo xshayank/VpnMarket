@@ -84,14 +84,18 @@ test('marzneshin token endpoint returns bearer token', function () {
         'password' => $this->apiKeyPlaintext,
     ]);
 
+    // Marzneshin format: access_token, is_sudo, token_type (no expires_in)
     $response->assertStatus(200)
         ->assertJsonStructure([
             'access_token',
+            'is_sudo',
             'token_type',
         ])
         ->assertJson([
             'token_type' => 'bearer',
-        ]);
+            'is_sudo' => true,
+        ])
+        ->assertJsonMissing(['expires_in']);
 });
 
 test('marzneshin token endpoint rejects invalid credentials', function () {
