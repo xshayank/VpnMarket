@@ -12,6 +12,7 @@ class Tetra98Config
     private const CACHE_KEY_API_KEY = 'tetra98.api_key';
     private const CACHE_KEY_BASE_URL = 'tetra98.base_url';
     private const CACHE_KEY_CALLBACK_PATH = 'tetra98.callback_path';
+    private const CACHE_KEY_DEFAULT_PHONE = 'tetra98.default_phone';
 
     protected static function getSetting(string $key, $default = null)
     {
@@ -122,6 +123,19 @@ class Tetra98Config
         return (int) config('tetra98.min_amount_toman', 10000);
     }
 
+    public static function getDefaultPhone(): ?string
+    {
+        return self::rememberForever(self::CACHE_KEY_DEFAULT_PHONE, function () {
+            $value = self::getSetting('payment.tetra98.default_phone');
+
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+
+            return null;
+        });
+    }
+
     public static function clearCache(): void
     {
         if (! self::canUsePersistentCache()) {
@@ -132,5 +146,6 @@ class Tetra98Config
         Cache::forget(self::CACHE_KEY_API_KEY);
         Cache::forget(self::CACHE_KEY_BASE_URL);
         Cache::forget(self::CACHE_KEY_CALLBACK_PATH);
+        Cache::forget(self::CACHE_KEY_DEFAULT_PHONE);
     }
 }

@@ -86,6 +86,7 @@ class ThemeSettings extends Page implements HasForms
         $this->data['payment_tetra98_base_url'] = $settings['payment.tetra98.base_url'] ?? $defaultData['payment_tetra98_base_url'];
         $this->data['payment_tetra98_callback_path'] = $settings['payment.tetra98.callback_path'] ?? $defaultData['payment_tetra98_callback_path'];
         $this->data['payment_tetra98_min_amount'] = $settings['payment.tetra98.min_amount'] ?? $defaultData['payment_tetra98_min_amount'];
+        $this->data['payment_tetra98_default_phone'] = $settings['payment.tetra98.default_phone'] ?? '';
 
         $homepageToggles = [
             'homepage.show_panels',
@@ -368,6 +369,12 @@ class ThemeSettings extends Page implements HasForms
                                 ->numeric()
                                 ->minValue(1000)
                                 ->helperText('حداقل مبلغ قابل پرداخت از طریق Tetra98 به تومان.'),
+                            TextInput::make('payment_tetra98_default_phone')
+                                ->label('شماره تلفن پیش‌فرض')
+                                ->placeholder('مثلاً 09121234567')
+                                ->maxLength(11)
+                                ->regex('/^09\d{9}$/')
+                                ->helperText('اختیاری - اگر کاربر شماره تلفن وارد نکند، این شماره برای پرداخت Tetra98 استفاده می‌شود.'),
                         ])->columns(2),
 
                         Section::make('درگاه استارز تلگرام')->schema([
@@ -436,6 +443,7 @@ class ThemeSettings extends Page implements HasForms
         $tetraBaseUrl = trim((string) ($formData['payment_tetra98_base_url'] ?? ''));
         $tetraCallbackPath = trim((string) ($formData['payment_tetra98_callback_path'] ?? ''));
         $tetraMinAmount = (int) ($formData['payment_tetra98_min_amount'] ?? config('tetra98.min_amount_toman', 10000));
+        $tetraDefaultPhone = trim((string) ($formData['payment_tetra98_default_phone'] ?? ''));
 
         $tetraBaseUrl = $tetraBaseUrl !== '' ? $tetraBaseUrl : config('tetra98.base_url', 'https://tetra98.ir');
         $tetraCallbackPath = $tetraCallbackPath !== '' ? $tetraCallbackPath : config('tetra98.callback_path', '/webhooks/tetra98/callback');
@@ -446,6 +454,7 @@ class ThemeSettings extends Page implements HasForms
         Setting::updateOrCreate(['key' => 'payment.tetra98.base_url'], ['value' => $tetraBaseUrl]);
         Setting::updateOrCreate(['key' => 'payment.tetra98.callback_path'], ['value' => $tetraCallbackPath]);
         Setting::updateOrCreate(['key' => 'payment.tetra98.min_amount'], ['value' => (string) $tetraMinAmount]);
+        Setting::updateOrCreate(['key' => 'payment.tetra98.default_phone'], ['value' => $tetraDefaultPhone]);
 
         unset(
             $formData['payment_tetra98_enabled'],
@@ -453,6 +462,7 @@ class ThemeSettings extends Page implements HasForms
             $formData['payment_tetra98_base_url'],
             $formData['payment_tetra98_callback_path'],
             $formData['payment_tetra98_min_amount'],
+            $formData['payment_tetra98_default_phone'],
         );
 
         foreach ($formData as $key => $value) {

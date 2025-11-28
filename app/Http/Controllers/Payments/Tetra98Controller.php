@@ -34,14 +34,16 @@ class Tetra98Controller extends Controller
         }
 
         $minAmount = Tetra98Config::getMinAmountToman();
+        $defaultPhone = Tetra98Config::getDefaultPhone();
 
         $user = Auth::user();
         $reseller = $user->reseller;
         $chargeMode = $reseller && $reseller->isTrafficBased() ? 'traffic' : 'wallet';
         $minAmountGb = null;
 
+        // Phone is optional if a default phone is configured
         $rules = [
-            'phone' => ['required', 'regex:/^09\d{9}$/'],
+            'phone' => $defaultPhone ? ['nullable', 'regex:/^09\d{9}$/'] : ['required', 'regex:/^09\d{9}$/'],
         ];
 
         if ($chargeMode === 'wallet') {
@@ -64,6 +66,15 @@ class Tetra98Controller extends Controller
             'phone.regex' => 'شماره موبایل باید با 09 شروع شده و 11 رقم باشد.',
         ]);
 
+        // Resolve the phone number: user-provided or default
+        $userPhone = trim((string) ($validated['phone'] ?? ''));
+        $resolvedPhone = $userPhone !== '' ? $userPhone : $defaultPhone;
+
+        // If no phone resolved, return an error
+        if (! $resolvedPhone || ! preg_match('/^09\d{9}$/', $resolvedPhone)) {
+            return back()->withErrors(['phone' => 'وارد کردن شماره موبایل برای پرداخت Tetra98 الزامی است.'])->withInput();
+        }
+
         $trafficGb = $chargeMode === 'traffic' ? (int) ($validated['traffic_gb'] ?? 0) : null;
         $amountToman = $chargeMode === 'traffic'
             ? (int) ($trafficGb * config('billing.traffic_rate_per_gb', config('billing.reseller.traffic.price_per_gb', 750)))
@@ -73,7 +84,8 @@ class Tetra98Controller extends Controller
             $hashId = 'tetra98-'.$user->id.'-'.Str::uuid()->toString();
             $metadata = [
                 'payment_method' => 'tetra98',
-                'phone' => $validated['phone'],
+                'phone' => $resolvedPhone,
+                'phone_source' => $userPhone !== '' ? 'user' : 'default',
                 'email' => $user->email,
                 'deposit_mode' => $chargeMode,
                 'type' => $chargeMode === 'traffic' ? Transaction::SUBTYPE_DEPOSIT_TRAFFIC : Transaction::SUBTYPE_DEPOSIT_WALLET,
@@ -139,7 +151,7 @@ class Tetra98Controller extends Controller
                 (int) $transaction->amount,
                 $description,
                 $user->email,
-                $validated['phone'],
+                $resolvedPhone,
                 $callbackUrl
             );
         } catch (Throwable $exception) {
