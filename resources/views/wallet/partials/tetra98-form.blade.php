@@ -1,12 +1,20 @@
 <div x-show="method === 'tetra98'" x-transition.opacity x-cloak class="space-y-6">
     <h3 class="text-lg font-semibold text-center">درگاه پرداخت (Tetra98)</h3>
 
+    @php
+        $tetraDefaultPhoneConfigured = $tetraSettings['default_phone_configured'] ?? false;
+    @endphp
+
     <div class="bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-700 rounded-xl p-4 text-sm text-sky-800 dark:text-sky-100 space-y-2">
         @if(($chargeMode ?? 'wallet') === 'traffic')
             <p>مقدار ترافیک را به گیگابایت وارد کنید. مبلغ پرداختی به تومان محاسبه و برای درگاه ارسال می‌شود.</p>
             <p>حداقل خرید ترافیک: {{ number_format($minAmountGb ?? 0) }} گیگابایت. نرخ هر گیگابایت: {{ number_format($trafficPricePerGb ?? 750) }} تومان.</p>
         @else
-            <p>شماره موبایل وارد شده باید با <strong>09</strong> شروع شده و ۱۱ رقم باشد.</p>
+            @if($tetraDefaultPhoneConfigured)
+                <p>شماره موبایل اختیاری است. در صورت خالی گذاشتن، از شماره پیش‌فرض تنظیم شده استفاده می‌شود.</p>
+            @else
+                <p>شماره موبایل وارد شده باید با <strong>09</strong> شروع شده و ۱۱ رقم باشد.</p>
+            @endif
         @endif
         <p>پس از تکمیل فرم، به صفحه پرداخت Tetra98 هدایت می‌شوید. لطفاً تا تأیید پرداخت منتظر بمانید.</p>
     </div>
@@ -78,7 +86,7 @@
 
         <div class="relative">
             <label for="tetra98-phone" class="absolute -top-2 right-4 text-xs bg-white/50 dark:bg-gray-800/50 px-1 text-gray-500">
-                شماره موبایل خریدار
+                شماره موبایل خریدار @if($tetraDefaultPhoneConfigured)<span class="text-green-600">(اختیاری برای Tetra98)</span>@endif
             </label>
             <input
                 id="tetra98-phone"
@@ -91,9 +99,13 @@
                 value="{{ $tetraHasOldContext ? old('phone', '') : '' }}"
                 class="block mt-1 w-full p-4 text-base text-center bg-transparent dark:bg-gray-700/50 border-2 border-sky-200 dark:border-sky-500 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="مثلاً 09121234567"
-                required
+                @if(!$tetraDefaultPhoneConfigured) required @endif
             >
-            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">این شماره برای هماهنگی پرداخت در Tetra98 استفاده می‌شود.</p>
+            @if($tetraDefaultPhoneConfigured)
+                <p class="mt-2 text-xs text-green-600 dark:text-green-400 text-center">اختیاری - در صورت خالی گذاشتن، از شماره پیش‌فرض تنظیم شده استفاده می‌شود.</p>
+            @else
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">این شماره برای هماهنگی پرداخت در Tetra98 استفاده می‌شود.</p>
+            @endif
         </div>
 
         <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">

@@ -132,6 +132,7 @@ class OrderController extends Controller
         $tetraSettings = [
             'enabled' => $tetraEnabled,
             'min_amount' => Tetra98Config::getMinAmountToman(),
+            'default_phone_configured' => ! empty(Tetra98Config::getDefaultPhone()),
         ];
 
         $defaultMethod = $cardToCardEnabled
