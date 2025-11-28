@@ -43,7 +43,7 @@ class Tetra98Controller extends Controller
 
         // Phone is optional if a default phone is configured
         $rules = [
-            'phone' => $defaultPhone ? ['nullable', 'regex:/^09\d{9}$/'] : ['required', 'regex:/^09\d{9}$/'],
+            'phone' => $defaultPhone ? ['nullable', 'regex:'.Tetra98Config::PHONE_REGEX] : ['required', 'regex:'.Tetra98Config::PHONE_REGEX],
         ];
 
         if ($chargeMode === 'wallet') {
@@ -71,7 +71,7 @@ class Tetra98Controller extends Controller
         $resolvedPhone = $userPhone !== '' ? $userPhone : $defaultPhone;
 
         // If no phone resolved, return an error
-        if (! $resolvedPhone || ! preg_match('/^09\d{9}$/', $resolvedPhone)) {
+        if (! $resolvedPhone || ! preg_match(Tetra98Config::PHONE_REGEX, $resolvedPhone)) {
             return back()->withErrors(['phone' => 'وارد کردن شماره موبایل برای پرداخت Tetra98 الزامی است.'])->withInput();
         }
 

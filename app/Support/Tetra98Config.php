@@ -8,6 +8,12 @@ use Illuminate\Support\Facades\Schema;
 
 class Tetra98Config
 {
+    /**
+     * Regex pattern for validating Iranian mobile phone numbers.
+     * Must start with 09 and be exactly 11 digits.
+     */
+    public const PHONE_REGEX = '/^09\d{9}$/';
+
     private const CACHE_KEY_ENABLED = 'tetra98.enabled';
     private const CACHE_KEY_API_KEY = 'tetra98.api_key';
     private const CACHE_KEY_BASE_URL = 'tetra98.base_url';

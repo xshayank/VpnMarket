@@ -6,6 +6,7 @@ use App\Models\Inbound;
 use App\Models\Panel;
 use App\Models\Setting;
 use App\Support\PaymentMethodConfig;
+use App\Support\Tetra98Config;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Radio;
@@ -373,7 +374,7 @@ class ThemeSettings extends Page implements HasForms
                                 ->label('شماره تلفن پیش‌فرض')
                                 ->placeholder('مثلاً 09121234567')
                                 ->maxLength(11)
-                                ->regex('/^09\d{9}$/')
+                                ->regex(Tetra98Config::PHONE_REGEX)
                                 ->helperText('اختیاری - اگر کاربر شماره تلفن وارد نکند، این شماره برای پرداخت Tetra98 استفاده می‌شود.'),
                         ])->columns(2),
 
