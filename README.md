@@ -161,6 +161,7 @@ wget -O install.sh https://raw.githubusercontent.com/xshayank/VPNMarket/main/ins
 
 - [راهنمای کامل قابلیت کدهای تخفیف](docs/PROMO_CODES.md)
 - [راهنمای کامل قابلیت ریسلری (Reseller)](docs/RESELLER_FEATURE.md)
+- [Enhanced Username Handling (مدیریت پیشرفته نام کاربری)](docs/USERNAME_HANDLING.md)
 
 ## 📄 مجوز استفاده (License)
 

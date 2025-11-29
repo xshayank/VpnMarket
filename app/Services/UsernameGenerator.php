@@ -1,0 +1,282 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\ResellerConfig;
+use Illuminate\Support\Facades\Log;
+
+class UsernameGenerator
+{
+    /**
+     * Default configuration values
+     */
+    protected int $prefixMaxLen;
+
+    protected int $suffixLen;
+
+    protected string $allowedCharsRegex;
+
+    protected string $fallbackPrefix;
+
+    protected int $maxTotalLen;
+
+    protected int $collisionRetryLimit;
+
+    public function __construct()
+    {
+        $this->prefixMaxLen = (int) config('username.prefix_max_len', 12);
+        $this->suffixLen = (int) config('username.suffix_len', 6);
+        $this->allowedCharsRegex = config('username.allowed_chars_regex', '/[^a-zA-Z0-9]/');
+        $this->fallbackPrefix = config('username.fallback_prefix', 'user');
+        $this->maxTotalLen = (int) config('username.max_total_len', 20);
+        $this->collisionRetryLimit = (int) config('username.collision_retry_limit', 5);
+    }
+
+    /**
+     * Sanitize a raw username prefix to conform to allowed characters and length
+     *
+     * @param  string  $raw  The original requested username
+     * @return string The sanitized prefix
+     */
+    public function sanitizePrefix(string $raw): string
+    {
+        // Strip non-allowed characters (keep only alphanumeric)
+        $sanitized = preg_replace($this->allowedCharsRegex, '', $raw);
+
+        // Trim to max length
+        $sanitized = substr($sanitized, 0, $this->prefixMaxLen);
+
+        // If empty after sanitization, use fallback
+        if (empty($sanitized)) {
+            $sanitized = $this->fallbackPrefix;
+        }
+
+        return strtolower($sanitized);
+    }
+
+    /**
+     * Generate a short random suffix using base36 characters
+     *
+     * @return string A random suffix of configured length
+     */
+    protected function generateSuffix(): string
+    {
+        $chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+        $suffix = '';
+
+        for ($i = 0; $i < $this->suffixLen; $i++) {
+            $suffix .= $chars[random_int(0, strlen($chars) - 1)];
+        }
+
+        return $suffix;
+    }
+
+    /**
+     * Generate the actual panel username from a requested username prefix
+     * Format: <sanitized_prefix>_<shortSuffix>
+     *
+     * @param  string  $requestedUsername  The original username requested by user/bot
+     * @param  callable|null  $existsChecker  Optional callback to check if username exists (receives username string, returns bool)
+     * @return array ['panel_username' => string, 'username_prefix' => string, 'original_username' => string]
+     *
+     * @throws \RuntimeException If unable to generate unique username after max retries
+     */
+    public function generatePanelUsername(string $requestedUsername, ?callable $existsChecker = null): array
+    {
+        $originalUsername = $requestedUsername;
+        $sanitizedPrefix = $this->sanitizePrefix($requestedUsername);
+
+        // Calculate max prefix length to ensure total stays within limit
+        // Total = prefix + 1 (underscore) + suffix
+        $maxPrefixForTotal = $this->maxTotalLen - 1 - $this->suffixLen;
+        if (strlen($sanitizedPrefix) > $maxPrefixForTotal) {
+            $sanitizedPrefix = substr($sanitizedPrefix, 0, $maxPrefixForTotal);
+        }
+
+        // Try to generate a unique username
+        for ($attempt = 1; $attempt <= $this->collisionRetryLimit; $attempt++) {
+            $suffix = $this->generateSuffix();
+            $panelUsername = "{$sanitizedPrefix}_{$suffix}";
+
+            // If no exists checker provided, assume it's unique
+            if ($existsChecker === null) {
+                return [
+                    'panel_username' => $panelUsername,
+                    'username_prefix' => $sanitizedPrefix,
+                    'original_username' => $originalUsername,
+                ];
+            }
+
+            // Check if username already exists
+            if (! $existsChecker($panelUsername)) {
+                Log::info('username_generated', [
+                    'original' => $originalUsername,
+                    'prefix' => $sanitizedPrefix,
+                    'panel_username' => $panelUsername,
+                    'attempt' => $attempt,
+                ]);
+
+                return [
+                    'panel_username' => $panelUsername,
+                    'username_prefix' => $sanitizedPrefix,
+                    'original_username' => $originalUsername,
+                ];
+            }
+
+            Log::warning('username_collision', [
+                'panel_username' => $panelUsername,
+                'attempt' => $attempt,
+            ]);
+        }
+
+        // All random suffix attempts failed, fall back to numeric increment
+        return $this->generateWithNumericFallback($sanitizedPrefix, $originalUsername, $existsChecker);
+    }
+
+    /**
+     * Generate username with numeric increment as fallback
+     *
+     * @param  string  $sanitizedPrefix  The sanitized prefix
+     * @param  string  $originalUsername  The original username
+     * @param  callable  $existsChecker  Callback to check existence
+     * @return array
+     *
+     * @throws \RuntimeException If unable to generate unique username
+     */
+    protected function generateWithNumericFallback(string $sanitizedPrefix, string $originalUsername, callable $existsChecker): array
+    {
+        // Try numeric suffixes starting from 1
+        for ($num = 1; $num <= 9999; $num++) {
+            $numSuffix = str_pad((string) $num, 4, '0', STR_PAD_LEFT);
+            $panelUsername = "{$sanitizedPrefix}_{$numSuffix}";
+
+            // Ensure total length doesn't exceed limit
+            if (strlen($panelUsername) > $this->maxTotalLen) {
+                break;
+            }
+
+            if (! $existsChecker($panelUsername)) {
+                Log::info('username_generated_numeric_fallback', [
+                    'original' => $originalUsername,
+                    'prefix' => $sanitizedPrefix,
+                    'panel_username' => $panelUsername,
+                    'numeric_suffix' => $numSuffix,
+                ]);
+
+                return [
+                    'panel_username' => $panelUsername,
+                    'username_prefix' => $sanitizedPrefix,
+                    'original_username' => $originalUsername,
+                ];
+            }
+        }
+
+        // This should be extremely rare
+        Log::error('username_generation_failed_all_attempts', [
+            'original' => $originalUsername,
+            'prefix' => $sanitizedPrefix,
+        ]);
+
+        throw new \RuntimeException("Failed to generate unique panel username for prefix: {$sanitizedPrefix}");
+    }
+
+    /**
+     * Extract the prefix from an existing panel username
+     * Useful for migrating legacy data
+     *
+     * @param  string  $panelUsername  The full panel username
+     * @return string The extracted prefix, or the full username if no underscore found
+     */
+    public function extractPrefix(string $panelUsername): string
+    {
+        // Find the last underscore and take everything before it as the prefix
+        $lastUnderscorePos = strrpos($panelUsername, '_');
+
+        if ($lastUnderscorePos === false) {
+            // No underscore found, return the full username as prefix
+            return $panelUsername;
+        }
+
+        return substr($panelUsername, 0, $lastUnderscorePos);
+    }
+
+    /**
+     * Check if a panel username exists in the local database
+     *
+     * @param  string  $panelUsername  The username to check
+     * @return bool True if exists, false otherwise
+     */
+    public function existsInDatabase(string $panelUsername): bool
+    {
+        return ResellerConfig::where('panel_username', $panelUsername)
+            ->orWhere('external_username', $panelUsername)
+            ->exists();
+    }
+
+    /**
+     * Create an exists checker callback that checks the local database
+     *
+     * @return callable
+     */
+    public function createDatabaseExistsChecker(): callable
+    {
+        return function (string $panelUsername): bool {
+            return $this->existsInDatabase($panelUsername);
+        };
+    }
+
+    /**
+     * Validate that a username conforms to panel requirements
+     *
+     * @param  string  $username  The username to validate
+     * @return array ['valid' => bool, 'errors' => array]
+     */
+    public function validateUsername(string $username): array
+    {
+        $errors = [];
+
+        // Check length
+        if (strlen($username) > $this->maxTotalLen) {
+            $errors[] = "Username exceeds maximum length of {$this->maxTotalLen} characters";
+        }
+
+        if (strlen($username) < 1) {
+            $errors[] = 'Username cannot be empty';
+        }
+
+        // Check for invalid characters
+        $sanitized = preg_replace($this->allowedCharsRegex, '', str_replace('_', '', $username));
+        if ($sanitized !== str_replace('_', '', $username)) {
+            $errors[] = 'Username contains invalid characters (only alphanumeric and underscore allowed)';
+        }
+
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * Get the configured prefix max length
+     */
+    public function getPrefixMaxLen(): int
+    {
+        return $this->prefixMaxLen;
+    }
+
+    /**
+     * Get the configured suffix length
+     */
+    public function getSuffixLen(): int
+    {
+        return $this->suffixLen;
+    }
+
+    /**
+     * Get the configured max total length
+     */
+    public function getMaxTotalLen(): int
+    {
+        return $this->maxTotalLen;
+    }
+}

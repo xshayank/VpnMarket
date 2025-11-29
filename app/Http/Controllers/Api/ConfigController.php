@@ -10,6 +10,7 @@ use App\Models\Plan;
 use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
 use App\Services\ConfigNameGenerator;
+use App\Services\UsernameGenerator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,8 @@ class ConfigController extends Controller
             ->select([
                 'id',
                 'external_username',
+                'username_prefix',
+                'panel_username',
                 'comment',
                 'traffic_limit_bytes',
                 'usage_bytes',
@@ -45,6 +48,24 @@ class ConfigController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate($request->input('per_page', 20));
 
+        // Transform configs to use display username
+        $transformedConfigs = collect($configs->items())->map(function ($config) {
+            return [
+                'id' => $config->id,
+                'username' => $config->display_username, // Show prefix to clients
+                'comment' => $config->comment,
+                'traffic_limit_bytes' => $config->traffic_limit_bytes,
+                'usage_bytes' => $config->usage_bytes,
+                'expires_at' => $config->expires_at?->toIso8601String(),
+                'status' => $config->status,
+                'panel_type' => $config->panel_type,
+                'panel_id' => $config->panel_id,
+                'subscription_url' => $config->subscription_url,
+                'created_at' => $config->created_at->toIso8601String(),
+                'updated_at' => $config->updated_at->toIso8601String(),
+            ];
+        });
+
         // Log the action
         ApiAuditLog::logAction(
             $reseller->user_id,
@@ -56,7 +77,7 @@ class ConfigController extends Controller
         );
 
         return response()->json([
-            'data' => $configs->items(),
+            'data' => $transformedConfigs,
             'meta' => [
                 'current_page' => $configs->currentPage(),
                 'last_page' => $configs->lastPage(),
@@ -68,14 +89,20 @@ class ConfigController extends Controller
 
     /**
      * Get a specific config by name.
+     * Accepts both username prefix and full panel username for backward compatibility.
      */
     public function show(Request $request, string $name): JsonResponse
     {
         $reseller = $request->attributes->get('api_reseller');
         $apiKey = $request->attributes->get('api_key');
 
+        // Search by multiple fields for flexibility
         $config = $reseller->configs()
-            ->where('external_username', $name)
+            ->where(function ($query) use ($name) {
+                $query->where('external_username', $name)
+                    ->orWhere('panel_username', $name)
+                    ->orWhere('username_prefix', $name);
+            })
             ->first();
 
         if (! $config) {
@@ -97,7 +124,8 @@ class ConfigController extends Controller
         return response()->json([
             'data' => [
                 'id' => $config->id,
-                'name' => $config->external_username,
+                'username' => $config->display_username, // Show prefix to clients
+                'name' => $config->display_username, // Backward compatibility alias
                 'comment' => $config->comment,
                 'traffic_limit_bytes' => $config->traffic_limit_bytes,
                 'traffic_limit_gb' => round($config->traffic_limit_bytes / (1024 * 1024 * 1024), 2),
@@ -253,24 +281,38 @@ class ConfigController extends Controller
                 $customName = $request->input('custom_name');
                 $maxClients = (int) ($request->input('max_clients', 1));
 
-                // Generate username
-                $username = '';
+                // Generate username using enhanced username generator
+                $panelUsername = '';
+                $usernamePrefix = '';
                 $nameVersion = null;
 
                 if ($customName) {
-                    $username = $customName;
+                    // Use enhanced username generator even for custom names
+                    // This ensures the username sent to panel is properly sanitized and unique
+                    $usernameGenerator = new UsernameGenerator();
+                    $usernameData = $usernameGenerator->generatePanelUsername(
+                        $customName,
+                        $usernameGenerator->createDatabaseExistsChecker()
+                    );
+                    $panelUsername = $usernameData['panel_username'];
+                    $usernamePrefix = $usernameData['username_prefix'];
                     $nameVersion = null;
                 } else {
                     $generator = new ConfigNameGenerator;
                     $nameData = $generator->generate($reseller, $panel, $reseller->type, []);
-                    $username = $nameData['name'];
+                    $panelUsername = $nameData['name'];
+                    // Extract prefix from generated name
+                    $usernameGenerator = new UsernameGenerator();
+                    $usernamePrefix = $usernameGenerator->extractPrefix($panelUsername);
                     $nameVersion = $nameData['version'];
                 }
 
-                // Create config record
+                // Create config record with both username_prefix and panel_username
                 $config = ResellerConfig::create([
                     'reseller_id' => $reseller->id,
-                    'external_username' => $username,
+                    'external_username' => $panelUsername, // Keep for backward compatibility
+                    'username_prefix' => $usernamePrefix, // Display username (original/sanitized)
+                    'panel_username' => $panelUsername, // Actual panel username
                     'name_version' => $nameVersion,
                     'comment' => $request->input('comment'),
                     'custom_name' => $customName,
@@ -287,16 +329,17 @@ class ConfigController extends Controller
                         'node_ids' => $nodeIds,
                         'max_clients' => $maxClients,
                         'created_via_api' => true,
+                        'original_custom_name' => $customName, // Store original for reference
                     ],
                 ]);
 
-                // Provision on panel
+                // Provision on panel using the panel_username (the sanitized unique one)
                 $plan = new Plan;
                 $plan->volume_gb = (float) $request->input('traffic_limit_gb');
                 $plan->duration_days = $expiresDays;
                 $plan->marzneshin_service_ids = $request->input('service_ids', []);
 
-                $provisionResult = $provisioner->provisionUser($panel, $plan, $username, [
+                $provisionResult = $provisioner->provisionUser($panel, $plan, $panelUsername, [
                     'traffic_limit_bytes' => $trafficLimitBytes,
                     'expires_at' => $expiresAt,
                     'service_ids' => $plan->marzneshin_service_ids,
@@ -353,7 +396,8 @@ class ConfigController extends Controller
         return response()->json([
             'data' => [
                 'id' => $config->id,
-                'name' => $config->external_username,
+                'username' => $config->display_username, // Show display username to clients
+                'name' => $config->display_username, // Backward compatibility alias
                 'subscription_url' => $config->subscription_url,
                 'traffic_limit_bytes' => $config->traffic_limit_bytes,
                 'traffic_limit_gb' => round($config->traffic_limit_bytes / (1024 * 1024 * 1024), 2),
@@ -369,14 +413,20 @@ class ConfigController extends Controller
 
     /**
      * Update a config by name.
+     * Accepts both username prefix and full panel username for backward compatibility.
      */
     public function update(Request $request, string $name): JsonResponse
     {
         $reseller = $request->attributes->get('api_reseller');
         $apiKey = $request->attributes->get('api_key');
 
+        // Search by multiple fields for flexibility
         $config = $reseller->configs()
-            ->where('external_username', $name)
+            ->where(function ($query) use ($name) {
+                $query->where('external_username', $name)
+                    ->orWhere('panel_username', $name)
+                    ->orWhere('username_prefix', $name);
+            })
             ->first();
 
         if (! $config) {
@@ -505,7 +555,8 @@ class ConfigController extends Controller
         return response()->json([
             'data' => [
                 'id' => $config->id,
-                'name' => $config->external_username,
+                'username' => $config->display_username, // Show display username to clients
+                'name' => $config->display_username, // Backward compatibility alias
                 'traffic_limit_bytes' => $config->traffic_limit_bytes,
                 'traffic_limit_gb' => round($config->traffic_limit_bytes / (1024 * 1024 * 1024), 2),
                 'expires_at' => $config->expires_at?->toIso8601String(),
@@ -519,14 +570,20 @@ class ConfigController extends Controller
 
     /**
      * Delete a config by name.
+     * Accepts both username prefix and full panel username for backward compatibility.
      */
     public function destroy(Request $request, string $name): JsonResponse
     {
         $reseller = $request->attributes->get('api_reseller');
         $apiKey = $request->attributes->get('api_key');
 
+        // Search by multiple fields for flexibility
         $config = $reseller->configs()
-            ->where('external_username', $name)
+            ->where(function ($query) use ($name) {
+                $query->where('external_username', $name)
+                    ->orWhere('panel_username', $name)
+                    ->orWhere('username_prefix', $name);
+            })
             ->first();
 
         if (! $config) {

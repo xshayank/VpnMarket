@@ -5,11 +5,13 @@ namespace Modules\Reseller\Services;
 use App\Models\Panel;
 use App\Models\Plan;
 use App\Models\Reseller;
+use App\Models\ResellerConfig;
 use App\Models\Setting;
 use App\Provisioners\ProvisionerFactory;
 use App\Services\EylandooService;
 use App\Services\MarzbanService;
 use App\Services\MarzneshinService;
+use App\Services\UsernameGenerator;
 use App\Services\XUIService;
 use Illuminate\Support\Facades\Log;
 
@@ -109,6 +111,119 @@ class ResellerProvisioner
         }
 
         return "{$prefix}_{$reseller->id}_{$type}_{$id}";
+    }
+
+    /**
+     * Generate an enhanced username for panel interactions
+     * Uses UsernameGenerator to create a sanitized, unique panel username
+     *
+     * @param  string  $requestedUsername  The original username requested by user/bot
+     * @param  callable|null  $existsChecker  Optional callback to check if username exists
+     * @return array ['panel_username' => string, 'username_prefix' => string, 'original_username' => string]
+     */
+    public function generateEnhancedUsername(string $requestedUsername, ?callable $existsChecker = null): array
+    {
+        $generator = new UsernameGenerator();
+        
+        // If no exists checker provided, use the default database checker
+        if ($existsChecker === null) {
+            $existsChecker = $generator->createDatabaseExistsChecker();
+        }
+        
+        return $generator->generatePanelUsername($requestedUsername, $existsChecker);
+    }
+
+    /**
+     * Create a panel-specific exists checker that queries the remote panel
+     * This can be used for extra safety when collision handling needs to check the panel directly
+     *
+     * @param  Panel  $panel  The panel to check against
+     * @return callable
+     */
+    public function createPanelExistsChecker(Panel $panel): callable
+    {
+        return function (string $username) use ($panel): bool {
+            // First check local database
+            $localExists = ResellerConfig::where('panel_username', $username)
+                ->orWhere('external_username', $username)
+                ->exists();
+            
+            if ($localExists) {
+                return true;
+            }
+            
+            // Optionally check the panel (for extra safety)
+            // This is disabled by default for performance, but can be enabled
+            // return $this->checkUsernameExistsOnPanel($panel, $username);
+            
+            return false;
+        };
+    }
+
+    /**
+     * Check if a username exists on a remote panel
+     *
+     * @param  Panel  $panel  The panel to check
+     * @param  string  $username  The username to check
+     * @return bool
+     */
+    protected function checkUsernameExistsOnPanel(Panel $panel, string $username): bool
+    {
+        try {
+            $credentials = $panel->getCredentials();
+            $panelType = strtolower(trim($panel->panel_type ?? ''));
+            
+            switch ($panelType) {
+                case 'marzneshin':
+                    $nodeHostname = $credentials['extra']['node_hostname'] ?? $credentials['node_hostname'] ?? '';
+                    $service = new MarzneshinService(
+                        $credentials['url'],
+                        $credentials['username'],
+                        $credentials['password'],
+                        $nodeHostname
+                    );
+                    if ($service->login()) {
+                        $user = $service->getUser($username);
+                        return $user !== null;
+                    }
+                    break;
+                    
+                case 'marzban':
+                    $nodeHostname = $credentials['extra']['node_hostname'] ?? $credentials['node_hostname'] ?? '';
+                    $service = new MarzbanService(
+                        $credentials['url'],
+                        $credentials['username'],
+                        $credentials['password'],
+                        $nodeHostname
+                    );
+                    if ($service->login()) {
+                        $user = $service->getUser($username);
+                        return $user !== null;
+                    }
+                    break;
+                    
+                case 'eylandoo':
+                    if (empty($credentials['url']) || empty($credentials['api_token'])) {
+                        return false;
+                    }
+                    $nodeHostname = $credentials['extra']['node_hostname'] ?? $credentials['node_hostname'] ?? '';
+                    $service = new EylandooService(
+                        $credentials['url'],
+                        $credentials['api_token'],
+                        $nodeHostname
+                    );
+                    $user = $service->getUser($username);
+                    return $user !== null;
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to check username on panel', [
+                'panel_id' => $panel->id,
+                'username' => $username,
+                'error' => $e->getMessage(),
+            ]);
+        }
+        
+        return false;
     }
 
     /**
