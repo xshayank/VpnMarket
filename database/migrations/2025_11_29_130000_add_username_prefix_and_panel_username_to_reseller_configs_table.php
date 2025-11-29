@@ -37,19 +37,27 @@ return new class extends Migration
             WHERE panel_username IS NULL AND external_username IS NOT NULL
         ');
 
-        // Extract prefix from existing usernames (take everything before the last underscore)
+        // Extract prefix from existing usernames using PHP for database-agnostic migration
         // This handles legacy usernames like "user_123_cfg_456" -> prefix "user_123_cfg"
         // and new-style names like "ali_abc123" -> prefix "ali"
-        \Illuminate\Support\Facades\DB::statement("
-            UPDATE reseller_configs 
-            SET username_prefix = CASE 
-                WHEN external_username LIKE '%\\_%' THEN 
-                    SUBSTRING(external_username, 1, LENGTH(external_username) - LENGTH(SUBSTRING_INDEX(external_username, '_', -1)) - 1)
-                ELSE 
-                    external_username
-            END
-            WHERE username_prefix IS NULL AND external_username IS NOT NULL
-        ");
+        $configs = \Illuminate\Support\Facades\DB::table('reseller_configs')
+            ->whereNull('username_prefix')
+            ->whereNotNull('external_username')
+            ->select('id', 'external_username')
+            ->get();
+
+        foreach ($configs as $config) {
+            $username = $config->external_username;
+            // Extract prefix: everything before the last underscore
+            $lastUnderscorePos = strrpos($username, '_');
+            $prefix = $lastUnderscorePos !== false 
+                ? substr($username, 0, $lastUnderscorePos) 
+                : $username;
+            
+            \Illuminate\Support\Facades\DB::table('reseller_configs')
+                ->where('id', $config->id)
+                ->update(['username_prefix' => $prefix]);
+        }
     }
 
     /**

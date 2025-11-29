@@ -10,6 +10,7 @@ use App\Models\Plan;
 use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
 use App\Services\Api\ApiResponseMapper;
+use App\Services\MarzneshinUsernameGenerator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,9 +41,25 @@ class MarzneshinStyleController extends Controller
 
     protected ApiResponseMapper $mapper;
 
+    protected ?MarzneshinUsernameGenerator $usernameGenerator = null;
+
     public function __construct()
     {
         $this->mapper = new ApiResponseMapper(ApiKey::STYLE_MARZNESHIN);
+    }
+
+    /**
+     * Get the username generator instance (lazy-loaded singleton)
+     *
+     * @return MarzneshinUsernameGenerator
+     */
+    protected function getUsernameGenerator(): MarzneshinUsernameGenerator
+    {
+        if ($this->usernameGenerator === null) {
+            $this->usernameGenerator = new MarzneshinUsernameGenerator();
+        }
+
+        return $this->usernameGenerator;
     }
 
     /**
@@ -487,9 +504,27 @@ class MarzneshinStyleController extends Controller
 
         $panelType = strtolower(trim($panel->panel_type ?? ''));
         $trafficLimitBytes = (int) $request->input('data_limit');
-        $username = $request->input('username');
+        $requestedUsername = $request->input('username');
         $expireStrategy = $request->input('expire_strategy', 'fixed_date');
         $usageDuration = $request->input('usage_duration', 0);
+
+        // Generate unique panel username using Marzneshin-specific generator
+        // This ONLY affects users created via the Marzneshin API adapter
+        $usernameData = null;
+        $panelUsername = $requestedUsername;
+        $usernamePrefix = $requestedUsername;
+        
+        if (config('marzneshin_username.enabled', true)) {
+            $usernameData = $this->getUsernameGenerator()->generate($requestedUsername);
+            $panelUsername = $usernameData['panel_username'];
+            $usernamePrefix = $usernameData['prefix'];
+            
+            Log::info('Marzneshin API username generated', [
+                'requested' => $requestedUsername,
+                'generated' => $panelUsername,
+                'prefix' => $usernamePrefix,
+            ]);
+        }
 
         // Calculate expiry based on expire_strategy
         // Special handling for Eylandoo panels: "never" expiry is not implemented in the panel.
@@ -558,7 +593,7 @@ class MarzneshinStyleController extends Controller
         $config = null;
 
         try {
-            DB::transaction(function () use ($request, $reseller, $user, $panel, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $serviceIds, $username, $apiKey, $expireStrategy, $usageDuration, &$result, &$config) {
+            DB::transaction(function () use ($request, $reseller, $user, $panel, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $serviceIds, $panelUsername, $usernamePrefix, $requestedUsername, $apiKey, $expireStrategy, $usageDuration, &$result, &$config) {
                 $provisioner = new ResellerProvisioner;
 
                 // Build meta with additional fields
@@ -567,6 +602,7 @@ class MarzneshinStyleController extends Controller
                     'service_ids' => $serviceIds,
                     'created_via_marzneshin_api' => true,
                     'expire_strategy' => $expireStrategy,
+                    'original_requested_username' => $requestedUsername,
                 ];
 
                 // Store data_limit_reset_strategy in meta if provided
@@ -581,15 +617,19 @@ class MarzneshinStyleController extends Controller
                 }
 
                 // Create config record
-                // Username behavior: store the API-provided username as prefix,
-                // which allows lookup by prefix when exact external_username match fails.
+                // Username handling for Marzneshin API:
+                // - external_username: the generated unique panel username (used for panel operations)
+                // - prefix: the original requested username (used for API lookup by prefix)
+                // - panel_username: same as external_username (the actual username on the panel)
                 $config = ResellerConfig::create([
                     'reseller_id' => $reseller->id,
-                    'external_username' => $username,
-                    'prefix' => $username, // Store API-provided username as prefix for fallback lookup
+                    'external_username' => $panelUsername,
+                    'panel_username' => $panelUsername,
+                    'username_prefix' => $usernamePrefix,
+                    'prefix' => $requestedUsername, // Store original requested username for fallback lookup
                     'name_version' => null,
                     'comment' => $request->input('note'),
-                    'custom_name' => $username,
+                    'custom_name' => $requestedUsername,
                     'traffic_limit_bytes' => $trafficLimitBytes,
                     'connections' => 1,
                     'usage_bytes' => 0,
@@ -602,13 +642,13 @@ class MarzneshinStyleController extends Controller
                     'meta' => $meta,
                 ]);
 
-                // Provision on panel
+                // Provision on panel using the generated unique username
                 $plan = new Plan;
                 $plan->volume_gb = $trafficLimitBytes / (1024 * 1024 * 1024);
                 $plan->duration_days = $expiresDays;
                 $plan->marzneshin_service_ids = $serviceIds;
 
-                $provisionResult = $provisioner->provisionUser($panel, $plan, $username, [
+                $provisionResult = $provisioner->provisionUser($panel, $plan, $panelUsername, [
                     'traffic_limit_bytes' => $trafficLimitBytes,
                     'expires_at' => $expiresAt,
                     'service_ids' => $serviceIds,
@@ -629,6 +669,8 @@ class MarzneshinStyleController extends Controller
                         'meta' => array_merge($provisionResult, [
                             'via_marzneshin_api' => true,
                             'api_key_id' => $apiKey->id,
+                            'requested_username' => $requestedUsername,
+                            'generated_username' => $panelUsername,
                         ]),
                     ]);
 
@@ -642,6 +684,8 @@ class MarzneshinStyleController extends Controller
             Log::error('Marzneshin API user creation failed', [
                 'reseller_id' => $reseller->id,
                 'api_key_id' => $apiKey->id,
+                'requested_username' => $requestedUsername,
+                'generated_username' => $panelUsername,
                 'error' => $e->getMessage(),
             ]);
 
@@ -659,7 +703,8 @@ class MarzneshinStyleController extends Controller
                 'api_style' => ApiKey::STYLE_MARZNESHIN,
                 'response_status' => 200,
                 'target_type' => 'user',
-                'target_id_or_name' => $username,
+                'target_id_or_name' => $panelUsername,
+                'requested_username' => $requestedUsername,
             ]
         );
 
