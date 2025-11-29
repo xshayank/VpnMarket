@@ -486,10 +486,10 @@ class MarzneshinStyleController extends Controller
                     $validator->errors()->add('expire_date', 'Either expire_date (ISO-8601) or expire (unix timestamp) is required for fixed_date strategy.');
                 }
             } elseif ($expireStrategy === 'start_on_first_use') {
-                // For start_on_first_use strategy, usage_duration is required
+                // For start_on_first_use strategy, usage_duration is required (but 0 is not a valid value)
                 $usageDuration = $input['usage_duration'] ?? null;
-                if ($usageDuration === null && $usageDuration !== 0) {
-                    $validator->errors()->add('usage_duration', 'The usage_duration field is required when expire_strategy is start_on_first_use.');
+                if ($usageDuration === null || $usageDuration <= 0) {
+                    $validator->errors()->add('usage_duration', 'The usage_duration field is required and must be greater than 0 when expire_strategy is start_on_first_use.');
                 }
             }
             // For 'never' strategy, no expire fields are required
