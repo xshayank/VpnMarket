@@ -11,6 +11,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\MarzbanService;
 use App\Services\MarzneshinService;
+use App\Services\UsernameGenerator;
 use App\Services\XUIService;
 use App\Support\PaymentMethodConfig;
 use Carbon\Carbon;
@@ -193,7 +194,12 @@ class WebhookController extends Controller
 
         $expireTimestamp = $order->expires_at->timestamp;
         $dataLimitBytes = $plan->data_limit_gb * 1073741824;
-        $uniqueUsername = "user_{$order->user_id}_order_{$order->id}";
+        
+        // Generate enhanced username to handle long telegram usernames
+        $usernameGenerator = new UsernameGenerator();
+        $requestedUsername = "user_{$order->user_id}_order_{$order->id}";
+        $usernameData = $usernameGenerator->generatePanelUsername($requestedUsername);
+        $uniqueUsername = $usernameData['panel_username'];
 
         try {
             if (($settings['panel_type'] ?? 'marzban') === 'marzban') {
@@ -405,7 +411,12 @@ class WebhookController extends Controller
             $settings = Setting::all()->pluck('value', 'key');
             $panelType = $settings->get('panel_type');
             $config = null;
-            $uniqueUsername = "user_{$user->id}_order_{$order->id}";
+            
+            // Generate enhanced username to handle long telegram usernames
+            $usernameGenerator = new UsernameGenerator();
+            $requestedUsername = "user_{$user->id}_order_{$order->id}";
+            $usernameData = $usernameGenerator->generatePanelUsername($requestedUsername);
+            $uniqueUsername = $usernameData['panel_username'];
 
             if ($panelType === 'marzban') {
                 $trafficInBytes = $plan->volume_gb * 1073741824;

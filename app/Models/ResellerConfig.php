@@ -15,6 +15,8 @@ class ResellerConfig extends Model
     protected $fillable = [
         'reseller_id',
         'external_username',
+        'username_prefix',
+        'panel_username',
         'name_version',
         'comment',
         'prefix',
@@ -129,5 +131,91 @@ class ResellerConfig extends Model
         } catch (\Exception $e) {
             return true; // If parsing fails, allow reset
         }
+    }
+
+    /**
+     * Get the display username (the original prefix requested by user)
+     * This is what should be shown to end users, not the full panel username
+     *
+     * @return string
+     */
+    public function getDisplayUsernameAttribute(): string
+    {
+        // Priority: username_prefix > extracted from external_username > external_username
+        if ($this->username_prefix !== null && $this->username_prefix !== '') {
+            return $this->username_prefix;
+        }
+
+        // Fallback: extract prefix from external_username if available
+        if ($this->external_username !== null && $this->external_username !== '') {
+            // Extract everything before the last underscore
+            $lastUnderscorePos = strrpos($this->external_username, '_');
+            if ($lastUnderscorePos !== false) {
+                return substr($this->external_username, 0, $lastUnderscorePos);
+            }
+            return $this->external_username;
+        }
+
+        return '';
+    }
+
+    /**
+     * Get the actual panel username that was sent to the VPN panel
+     *
+     * @return string
+     */
+    public function getPanelUsernameAttribute(): string
+    {
+        // Priority: panel_username column > external_username > panel_user_id
+        $panelUsername = $this->attributes['panel_username'] ?? null;
+        if ($panelUsername !== null && $panelUsername !== '') {
+            return $panelUsername;
+        }
+
+        if ($this->external_username !== null && $this->external_username !== '') {
+            return $this->external_username;
+        }
+
+        return $this->panel_user_id ?? '';
+    }
+
+    /**
+     * Get the effective username that should be used for panel API calls
+     * This ensures we always use the correct username for interacting with panels
+     *
+     * @return string
+     */
+    public function getEffectivePanelUsername(): string
+    {
+        return $this->panel_username;
+    }
+
+    /**
+     * Scope: Find configs by username prefix
+     * Searches for configs where the username_prefix matches or starts with the given value
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param string $prefix
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeByUsernamePrefix($query, string $prefix)
+    {
+        return $query->where('username_prefix', $prefix)
+            ->orWhere('username_prefix', 'LIKE', $prefix . '%');
+    }
+
+    /**
+     * Scope: Find configs by exact panel username
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param string $panelUsername
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeByPanelUsername($query, string $panelUsername)
+    {
+        return $query->where(function ($q) use ($panelUsername) {
+            $q->where('panel_username', $panelUsername)
+                ->orWhere('external_username', $panelUsername);
+        });
     }
 }
