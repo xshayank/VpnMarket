@@ -152,9 +152,11 @@ class ResellerProvisioner
                 return true;
             }
             
-            // Optionally check the panel (for extra safety)
-            // This is disabled by default for performance, but can be enabled
-            // return $this->checkUsernameExistsOnPanel($panel, $username);
+            // Note: Remote panel check is disabled by default for performance.
+            // Enable remote checking by uncommenting the following line if you need
+            // to verify usernames against the panel API. This adds latency but
+            // provides extra safety for edge cases where the local DB is out of sync.
+            // To enable, uncomment: return $this->checkUsernameExistsOnPanel($panel, $username);
             
             return false;
         };

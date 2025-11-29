@@ -25,7 +25,7 @@ class UsernameGeneratorTest extends TestCase
         $this->assertEquals('ali123', $this->generator->sanitizePrefix('ali@123'));
         $this->assertEquals('username', $this->generator->sanitizePrefix('user.name!'));
         $this->assertEquals('test', $this->generator->sanitizePrefix('test#$%^'));
-        $this->assertEquals('helloworld', $this->generator->sanitizePrefix('hello_world')); // underscores stripped (only alphanumeric kept)
+        $this->assertEquals('helloworld', $this->generator->sanitizePrefix('hello_world')); // underscore is non-alphanumeric so it's stripped
         $this->assertEquals('abc123xyz', $this->generator->sanitizePrefix('abc-123-xyz'));
     }
 
@@ -75,7 +75,7 @@ class UsernameGeneratorTest extends TestCase
         $this->assertArrayHasKey('original_username', $result);
         
         // Panel username should be prefix_suffix format
-        $this->assertStringContains('_', $result['panel_username']);
+        $this->assertStringContainsString('_', $result['panel_username']);
         $this->assertEquals('ali', $result['username_prefix']);
         $this->assertEquals('ali', $result['original_username']);
         
@@ -201,16 +201,5 @@ class UsernameGeneratorTest extends TestCase
         
         // Default suffix length is 6
         $this->assertEquals(6, strlen($suffix));
-    }
-
-    /**
-     * Helper function to check if string contains substring
-     */
-    protected function assertStringContains(string $needle, string $haystack): void
-    {
-        $this->assertTrue(
-            str_contains($haystack, $needle),
-            "Failed asserting that '{$haystack}' contains '{$needle}'"
-        );
     }
 }

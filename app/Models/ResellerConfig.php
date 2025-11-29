@@ -142,12 +142,12 @@ class ResellerConfig extends Model
     public function getDisplayUsernameAttribute(): string
     {
         // Priority: username_prefix > extracted from external_username > external_username
-        if (!empty($this->username_prefix)) {
+        if ($this->username_prefix !== null && $this->username_prefix !== '') {
             return $this->username_prefix;
         }
 
         // Fallback: extract prefix from external_username if available
-        if (!empty($this->external_username)) {
+        if ($this->external_username !== null && $this->external_username !== '') {
             // Extract everything before the last underscore
             $lastUnderscorePos = strrpos($this->external_username, '_');
             if ($lastUnderscorePos !== false) {
@@ -167,11 +167,12 @@ class ResellerConfig extends Model
     public function getPanelUsernameAttribute(): string
     {
         // Priority: panel_username column > external_username > panel_user_id
-        if (!empty($this->attributes['panel_username'])) {
-            return $this->attributes['panel_username'];
+        $panelUsername = $this->attributes['panel_username'] ?? null;
+        if ($panelUsername !== null && $panelUsername !== '') {
+            return $panelUsername;
         }
 
-        if (!empty($this->external_username)) {
+        if ($this->external_username !== null && $this->external_username !== '') {
             return $this->external_username;
         }
 
