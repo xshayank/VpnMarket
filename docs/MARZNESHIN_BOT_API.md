@@ -99,21 +99,77 @@ Get user details.
 #### POST /api/users
 Create a new user.
 
-**Request:**
+**Request Body Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `username` | string | Yes | User identifier (alphanumeric, underscore, hyphen) |
+| `data_limit` | integer | Yes | Traffic limit in bytes (e.g., 10737418240 for 10 GB) |
+| `expire_strategy` | string | No | One of: `fixed_date` (default), `start_on_first_use`, `never` |
+| `expire_date` | string | If `expire_strategy` = `fixed_date` | Expiry date in ISO-8601 format (e.g., "2024-12-31T23:59:59Z") |
+| `expire` | integer | Alternative to `expire_date` | Unix timestamp (seconds) for expiry |
+| `usage_duration` | integer | If `expire_strategy` = `start_on_first_use` | Duration in seconds from first connection |
+| `service_ids` | array | No | **MUST be an array** (use `[]` if empty, **never** `null`) |
+| `data_limit_reset_strategy` | string | No | Reset strategy: `no_reset` (default), `day`, `week`, `month`, `year` |
+| `note` | string | No | User note (max 500 chars), forwarded to the panel |
+
+**Example: fixed_date Strategy with expire_date**
 ```json
 {
   "username": "newuser",
   "data_limit": 10737418240,
-  "expire_date": "2024-12-31T23:59:59Z",
   "expire_strategy": "fixed_date",
+  "expire_date": "2024-12-31T23:59:59Z",
   "service_ids": [1, 2],
   "data_limit_reset_strategy": "no_reset",
   "note": "Created via API"
 }
 ```
 
+**Example: fixed_date Strategy with unix timestamp**
+```json
+{
+  "username": "newuser",
+  "data_limit": 10737418240,
+  "expire_strategy": "fixed_date",
+  "expire": 1735689599,
+  "service_ids": [],
+  "note": "User with timestamp expiry"
+}
+```
+
+**Example: start_on_first_use Strategy**
+```json
+{
+  "username": "newuser",
+  "data_limit": 5368709120,
+  "expire_strategy": "start_on_first_use",
+  "usage_duration": 2592000,
+  "service_ids": [],
+  "note": "30 days from first use"
+}
+```
+
+**Example: never Strategy**
+```json
+{
+  "username": "newuser",
+  "data_limit": 0,
+  "expire_strategy": "never",
+  "service_ids": [],
+  "note": "Unlimited user"
+}
+```
+
+**⚠️ Important Notes:**
+- **`service_ids` MUST be an array.** If you don't want to specify services, use an empty array `[]`. Sending `null` will cause a 500 error on the remote panel.
+- For `fixed_date` strategy, you must provide either `expire_date` (ISO-8601 string) or `expire` (unix timestamp in seconds).
+- For `start_on_first_use` strategy, `usage_duration` (in seconds) is required.
+- The `note` field is forwarded to the remote panel's note field.
+- `data_limit` is cast to integer internally.
+
 **Expire Strategies:**
-- `fixed_date`: Expires on the specified `expire_date`
+- `fixed_date`: Expires on the specified `expire_date` or `expire` timestamp
 - `start_on_first_use`: Expires after `usage_duration` seconds from first connection
 - `never`: Never expires (translated to 10 years for Eylandoo panels)
 
@@ -125,6 +181,7 @@ Update user settings.
 {
   "data_limit": 21474836480,
   "expire_date": "2025-01-31T23:59:59Z",
+  "service_ids": [1, 2],
   "note": "Updated limits"
 }
 ```

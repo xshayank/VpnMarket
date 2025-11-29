@@ -60,12 +60,36 @@ class MarzneshinService
             // Map our application data to Marzneshin API format
             $apiData = [
                 'username' => $userData['username'],
-                'expire_strategy' => 'fixed_date',
-                'expire_date' => $this->convertTimestampToIso8601($userData['expire']),
-                'data_limit' => $userData['data_limit'],
-                'data_limit_reset_strategy' => 'no_reset',
-                'service_ids' => $userData['service_ids'] ?? [],
+                'data_limit' => (int) $userData['data_limit'],
+                'data_limit_reset_strategy' => $userData['data_limit_reset_strategy'] ?? 'no_reset',
+                // Coerce service_ids to array; never send null
+                'service_ids' => is_array($userData['service_ids'] ?? null) ? $userData['service_ids'] : [],
             ];
+
+            // Forward note if provided
+            if (isset($userData['note']) && $userData['note'] !== null && $userData['note'] !== '') {
+                $apiData['note'] = $userData['note'];
+            }
+
+            // Handle expire_strategy branching
+            $expireStrategy = $userData['expire_strategy'] ?? 'fixed_date';
+            $apiData['expire_strategy'] = $expireStrategy;
+
+            if ($expireStrategy === 'start_on_first_use') {
+                // Require usage_duration (seconds) for start_on_first_use
+                $apiData['usage_duration'] = (int) ($userData['usage_duration'] ?? 0);
+            } elseif ($expireStrategy === 'never') {
+                // For "never" strategy, do not send expire_date or usage_duration
+            } else {
+                // Default: fixed_date strategy
+                // Convert unix timestamp to ISO-8601 if expire is provided, otherwise use expire_date
+                if (isset($userData['expire'])) {
+                    $apiData['expire_date'] = $this->convertTimestampToIso8601((int) $userData['expire']);
+                } elseif (isset($userData['expire_date'])) {
+                    // If expire_date is already ISO-8601, use it directly
+                    $apiData['expire_date'] = $userData['expire_date'];
+                }
+            }
 
             $response = Http::withToken($this->accessToken)
                 ->withHeaders(['Accept' => 'application/json'])
@@ -107,18 +131,40 @@ class MarzneshinService
                 'username' => $username,
             ];
 
-            // Only add fields that are provided
-            if (isset($userData['expire'])) {
+            // Forward note if provided
+            if (isset($userData['note'])) {
+                $apiData['note'] = $userData['note'];
+            }
+
+            // Handle expire_strategy branching
+            $expireStrategy = $userData['expire_strategy'] ?? null;
+            if ($expireStrategy) {
+                $apiData['expire_strategy'] = $expireStrategy;
+
+                if ($expireStrategy === 'start_on_first_use' && isset($userData['usage_duration'])) {
+                    $apiData['usage_duration'] = (int) $userData['usage_duration'];
+                } elseif ($expireStrategy === 'fixed_date' && isset($userData['expire'])) {
+                    $apiData['expire_date'] = $this->convertTimestampToIso8601((int) $userData['expire']);
+                } elseif ($expireStrategy === 'fixed_date' && isset($userData['expire_date'])) {
+                    $apiData['expire_date'] = $userData['expire_date'];
+                }
+            } elseif (isset($userData['expire'])) {
+                // Legacy: if only expire is provided without expire_strategy
                 $apiData['expire_strategy'] = 'fixed_date';
-                $apiData['expire_date'] = $this->convertTimestampToIso8601($userData['expire']);
+                $apiData['expire_date'] = $this->convertTimestampToIso8601((int) $userData['expire']);
             }
 
             if (isset($userData['data_limit'])) {
-                $apiData['data_limit'] = $userData['data_limit'];
+                $apiData['data_limit'] = (int) $userData['data_limit'];
             }
 
-            if (isset($userData['service_ids'])) {
-                $apiData['service_ids'] = (array) $userData['service_ids'];
+            if (isset($userData['data_limit_reset_strategy'])) {
+                $apiData['data_limit_reset_strategy'] = $userData['data_limit_reset_strategy'];
+            }
+
+            // Coerce service_ids to array; never send null
+            if (array_key_exists('service_ids', $userData)) {
+                $apiData['service_ids'] = is_array($userData['service_ids']) ? $userData['service_ids'] : [];
             }
 
             $response = Http::withToken($this->accessToken)
@@ -413,7 +459,7 @@ class MarzneshinService
                 // Map and filter users - ensure we only return configs owned by the specified admin
                 $configs = array_map(function ($user) {
                     $ownerUsername = OwnerExtraction::ownerUsername($user);
-                    
+
                     return [
                         'id' => $user['id'] ?? null,
                         'username' => $user['username'],

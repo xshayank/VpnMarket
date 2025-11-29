@@ -50,13 +50,11 @@ class MarzneshinStyleController extends Controller
 
     /**
      * Get the username generator instance (lazy-loaded singleton)
-     *
-     * @return MarzneshinUsernameGenerator
      */
     protected function getUsernameGenerator(): MarzneshinUsernameGenerator
     {
         if ($this->usernameGenerator === null) {
-            $this->usernameGenerator = new MarzneshinUsernameGenerator();
+            $this->usernameGenerator = new MarzneshinUsernameGenerator;
         }
 
         return $this->usernameGenerator;
@@ -84,9 +82,9 @@ class MarzneshinStyleController extends Controller
      * does not exist, we search by the stored prefix and return the matching config
      * (or the latest) to the bot.
      *
-     * @param \App\Models\Reseller $reseller The reseller to scope configs to
-     * @param string $username The username to search for
-     * @param int|null $panelId Optional panel ID to filter by
+     * @param  \App\Models\Reseller  $reseller  The reseller to scope configs to
+     * @param  string  $username  The username to search for
+     * @param  int|null  $panelId  Optional panel ID to filter by
      * @return ResellerConfig|null The matching config or null
      */
     protected function findConfigByUsernameOrPrefix($reseller, string $username, ?int $panelId = null): ?ResellerConfig
@@ -200,6 +198,7 @@ class MarzneshinStyleController extends Controller
             } else {
                 $reason = 'API key is invalid';
             }
+
             return response()->json([
                 'detail' => $reason,
             ], 401);
@@ -245,7 +244,7 @@ class MarzneshinStyleController extends Controller
         }
 
         // For admin credential flow, generate an ephemeral session token
-        $sessionToken = 'mzsess_' . bin2hex(random_bytes(32));
+        $sessionToken = 'mzsess_'.bin2hex(random_bytes(32));
         $ttlMinutes = self::SESSION_TOKEN_TTL_MINUTES;
 
         \Illuminate\Support\Facades\Cache::put(
@@ -457,18 +456,44 @@ class MarzneshinStyleController extends Controller
         $reseller = $request->attributes->get('api_reseller');
         $user = $request->attributes->get('api_user');
 
-        // Validation using Marzneshin field names
-        $validator = Validator::make($request->all(), [
+        // Normalize service_ids: if null or missing, coerce to empty array
+        $input = $request->all();
+        if (! isset($input['service_ids']) || $input['service_ids'] === null) {
+            $input['service_ids'] = [];
+        }
+
+        // Validation using Marzneshin field names with strategy-specific rules
+        $validator = Validator::make($input, [
             'username' => 'required|string|max:100|regex:/^[a-zA-Z0-9_-]+$/',
             'data_limit' => 'required|integer|min:0',
             'data_limit_reset_strategy' => 'nullable|string|max:50',
             'expire_date' => 'nullable|date',
+            'expire' => 'nullable|integer|min:0', // Unix timestamp alternative for expire_date
             'expire_strategy' => 'nullable|string|in:fixed_date,start_on_first_use,never',
             'usage_duration' => 'nullable|integer|min:0',
             'service_ids' => 'nullable|array',
             'service_ids.*' => 'integer',
-            'note' => 'nullable|string|max:200',
+            'note' => 'nullable|string|max:500',
         ]);
+
+        // Add custom validation for strategy-specific requirements
+        $validator->after(function ($validator) use ($input) {
+            $expireStrategy = $input['expire_strategy'] ?? 'fixed_date';
+
+            if ($expireStrategy === 'fixed_date') {
+                // For fixed_date strategy, either expire_date or expire (unix timestamp) must be provided
+                if (empty($input['expire_date']) && empty($input['expire'])) {
+                    $validator->errors()->add('expire_date', 'Either expire_date (ISO-8601) or expire (unix timestamp) is required for fixed_date strategy.');
+                }
+            } elseif ($expireStrategy === 'start_on_first_use') {
+                // For start_on_first_use strategy, usage_duration is required (but 0 is not a valid value)
+                $usageDuration = $input['usage_duration'] ?? null;
+                if ($usageDuration === null || $usageDuration <= 0) {
+                    $validator->errors()->add('usage_duration', 'The usage_duration field is required and must be greater than 0 when expire_strategy is start_on_first_use.');
+                }
+            }
+            // For 'never' strategy, no expire fields are required
+        });
 
         if ($validator->fails()) {
             return response()->json(
@@ -506,19 +531,20 @@ class MarzneshinStyleController extends Controller
         $trafficLimitBytes = (int) $request->input('data_limit');
         $requestedUsername = $request->input('username');
         $expireStrategy = $request->input('expire_strategy', 'fixed_date');
-        $usageDuration = $request->input('usage_duration', 0);
+        $usageDuration = (int) $request->input('usage_duration', 0);
+        $serviceIds = $input['service_ids']; // Already normalized to array
 
         // Generate unique panel username using Marzneshin-specific generator
         // This ONLY affects users created via the Marzneshin API adapter
         $usernameData = null;
         $panelUsername = $requestedUsername;
         $usernamePrefix = $requestedUsername;
-        
+
         if (config('marzneshin_username.enabled', true)) {
             $usernameData = $this->getUsernameGenerator()->generate($requestedUsername);
             $panelUsername = $usernameData['panel_username'];
             $usernamePrefix = $usernameData['prefix'];
-            
+
             Log::info('Marzneshin API username generated', [
                 'requested' => $requestedUsername,
                 'generated' => $panelUsername,
@@ -540,6 +566,9 @@ class MarzneshinStyleController extends Controller
             $expiresAt = $this->getNeverExpiryDate();
         } elseif ($request->has('expire_date')) {
             $expiresAt = \Carbon\Carbon::parse($request->input('expire_date'));
+        } elseif ($request->has('expire')) {
+            // Handle unix timestamp for expire field
+            $expiresAt = \Carbon\Carbon::createFromTimestamp((int) $request->input('expire'));
         } else {
             // Default to 30 days if no expire_date provided
             $expiresAt = now()->addDays(30);
@@ -548,7 +577,7 @@ class MarzneshinStyleController extends Controller
         $expiresDays = now()->diffInDays($expiresAt);
 
         // Handle service_ids -> node_ids mapping for Eylandoo
-        $serviceIds = $request->input('service_ids', []);
+        // $serviceIds is already normalized from $input['service_ids'] above
         $nodeIds = [];
 
         if ($panelType === 'eylandoo') {
