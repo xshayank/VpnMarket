@@ -197,7 +197,7 @@ test('marzneshin users list endpoint returns users in marzneshin format', functi
 
     $data = $response->json();
     expect($data['total'])->toBeGreaterThanOrEqual(1);
-    
+
     // Check first item has Marzneshin format
     $user = $data['items'][0];
     expect($user)->toHaveKeys([
@@ -326,7 +326,7 @@ test('marzneshin error format matches spec', function () {
 
     $response->assertStatus(422);
     $data = $response->json();
-    
+
     // Should have 'detail' key (Marzneshin format)
     expect($data)->toHaveKey('detail');
 });
@@ -341,7 +341,7 @@ test('marzneshin bearer token authentication works', function () {
 
 test('marzneshin basic auth works with api key', function () {
     $encoded = base64_encode("{$this->apiKeyPlaintext}:{$this->apiKeyPlaintext}");
-    
+
     $response = $this->withHeaders([
         'Authorization' => "Basic {$encoded}",
     ])->getJson('/api/users');
@@ -355,4 +355,170 @@ test('marzneshin api key header works', function () {
     ])->getJson('/api/users');
 
     $response->assertStatus(200);
+});
+
+// Validation tests for service_ids, note, and expire strategies
+
+test('marzneshin create user validation accepts null service_ids by normalizing to array', function () {
+    // The validation should pass when service_ids is null (it gets normalized to [])
+    // The provisioner may fail, but validation should pass
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_null_services',
+        'data_limit' => 10737418240,
+        'expire_date' => now()->addDays(30)->toIso8601String(),
+        'expire_strategy' => 'fixed_date',
+        'service_ids' => null,  // Explicitly null
+    ]);
+
+    // Should not fail with 422 validation error for service_ids
+    // May fail with 500 due to provisioner, but that's expected in test environment
+    expect($response->status())->not->toBe(422);
+});
+
+test('marzneshin create user validation accepts note field', function () {
+    $testNote = 'Test note created via API';
+
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_with_note',
+        'data_limit' => 5368709120,
+        'expire_date' => now()->addDays(30)->toIso8601String(),
+        'expire_strategy' => 'fixed_date',
+        'service_ids' => [],
+        'note' => $testNote,
+    ]);
+
+    // Should not fail validation (422) for note field
+    // May fail with 500 due to provisioner in test environment
+    expect($response->status())->not->toBe(422);
+});
+
+test('marzneshin create user validation accepts expire timestamp', function () {
+    $expireTimestamp = now()->addDays(30)->timestamp;
+
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_fixed_date_ts',
+        'data_limit' => 10737418240,
+        'expire_strategy' => 'fixed_date',
+        'expire' => $expireTimestamp,  // Unix timestamp
+        'service_ids' => [],
+    ]);
+
+    // Should not fail validation (422) - expire timestamp should be accepted
+    expect($response->status())->not->toBe(422);
+});
+
+test('marzneshin create user with start_on_first_use strategy requires usage_duration', function () {
+    // Without usage_duration should fail validation
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_start_on_first_use_no_duration',
+        'data_limit' => 10737418240,
+        'expire_strategy' => 'start_on_first_use',
+        'service_ids' => [],
+        // Missing usage_duration
+    ]);
+
+    $response->assertStatus(422);
+});
+
+test('marzneshin create user validation accepts start_on_first_use strategy with usage_duration', function () {
+    $usageDuration = 2592000; // 30 days in seconds
+
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_start_on_first_use',
+        'data_limit' => 5368709120,
+        'expire_strategy' => 'start_on_first_use',
+        'usage_duration' => $usageDuration,
+        'service_ids' => [],
+        'note' => 'Start on first use test',
+    ]);
+
+    // Should not fail validation (422) - start_on_first_use with usage_duration is valid
+    expect($response->status())->not->toBe(422);
+});
+
+test('marzneshin create user validation accepts never strategy', function () {
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_never_expire',
+        'data_limit' => 0,
+        'expire_strategy' => 'never',
+        'service_ids' => [],
+        'note' => 'Never expire user',
+    ]);
+
+    // Should not fail validation (422) - never strategy is valid
+    expect($response->status())->not->toBe(422);
+});
+
+test('marzneshin create user with fixed_date strategy requires expire_date or expire', function () {
+    // Without expire_date or expire should fail validation
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_fixed_date_no_expire',
+        'data_limit' => 10737418240,
+        'expire_strategy' => 'fixed_date',
+        'service_ids' => [],
+        // Missing both expire_date and expire
+    ]);
+
+    $response->assertStatus(422);
+});
+
+test('marzneshin create user validation accepts empty service_ids array', function () {
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_empty_services',
+        'data_limit' => 10737418240,
+        'expire_date' => now()->addDays(30)->toIso8601String(),
+        'expire_strategy' => 'fixed_date',
+        'service_ids' => [],  // Empty array
+    ]);
+
+    // Should not fail validation (422) - empty service_ids array is valid
+    expect($response->status())->not->toBe(422);
+});
+
+test('marzneshin create user validation accepts missing service_ids', function () {
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_no_services',
+        'data_limit' => 10737418240,
+        'expire_date' => now()->addDays(30)->toIso8601String(),
+        'expire_strategy' => 'fixed_date',
+        // service_ids not provided
+    ]);
+
+    // Should not fail validation (422) - missing service_ids defaults to []
+    expect($response->status())->not->toBe(422);
+});
+
+test('marzneshin create user validation rejects too long note', function () {
+    $longNote = str_repeat('a', 501);  // 501 characters, over the limit
+
+    $response = $this->withHeaders([
+        'Authorization' => "Bearer {$this->apiKeyPlaintext}",
+    ])->postJson('/api/users', [
+        'username' => 'test_long_note',
+        'data_limit' => 10737418240,
+        'expire_date' => now()->addDays(30)->toIso8601String(),
+        'expire_strategy' => 'fixed_date',
+        'service_ids' => [],
+        'note' => $longNote,
+    ]);
+
+    $response->assertStatus(422);
 });
