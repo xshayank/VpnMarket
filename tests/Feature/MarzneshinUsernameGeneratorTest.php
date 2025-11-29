@@ -308,4 +308,33 @@ class MarzneshinUsernameGeneratorTest extends TestCase
         $this->assertNotNull($foundByExternal);
         $this->assertEquals($config->id, $foundByExternal->id);
     }
+
+    /**
+     * Test the isGeneratedUsername validation method
+     */
+    public function test_is_generated_username_validation(): void
+    {
+        $generator = new MarzneshinUsernameGenerator();
+
+        // Generate a valid username
+        $result = $generator->generate('testuser');
+
+        // Should detect our generated username as valid
+        $this->assertTrue($generator->isGeneratedUsername($result['panel_username']));
+
+        // Should reject usernames with special characters
+        $this->assertFalse($generator->isGeneratedUsername('test_user'));
+        $this->assertFalse($generator->isGeneratedUsername('test-user'));
+        $this->assertFalse($generator->isGeneratedUsername('test@user'));
+
+        // Should reject usernames that are too short (only suffix length or less)
+        $this->assertFalse($generator->isGeneratedUsername('ab'));
+        $this->assertFalse($generator->isGeneratedUsername('abc'));
+
+        // Should reject uppercase usernames
+        $this->assertFalse($generator->isGeneratedUsername('TestUser123'));
+
+        // Should accept valid lowercase alphanumeric usernames
+        $this->assertTrue($generator->isGeneratedUsername('testuser1234'));
+    }
 }

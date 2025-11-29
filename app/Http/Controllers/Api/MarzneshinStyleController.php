@@ -41,9 +41,25 @@ class MarzneshinStyleController extends Controller
 
     protected ApiResponseMapper $mapper;
 
+    protected ?MarzneshinUsernameGenerator $usernameGenerator = null;
+
     public function __construct()
     {
         $this->mapper = new ApiResponseMapper(ApiKey::STYLE_MARZNESHIN);
+    }
+
+    /**
+     * Get the username generator instance (lazy-loaded singleton)
+     *
+     * @return MarzneshinUsernameGenerator
+     */
+    protected function getUsernameGenerator(): MarzneshinUsernameGenerator
+    {
+        if ($this->usernameGenerator === null) {
+            $this->usernameGenerator = new MarzneshinUsernameGenerator();
+        }
+
+        return $this->usernameGenerator;
     }
 
     /**
@@ -499,8 +515,7 @@ class MarzneshinStyleController extends Controller
         $usernamePrefix = $requestedUsername;
         
         if (config('marzneshin_username.enabled', true)) {
-            $usernameGenerator = new MarzneshinUsernameGenerator();
-            $usernameData = $usernameGenerator->generate($requestedUsername);
+            $usernameData = $this->getUsernameGenerator()->generate($requestedUsername);
             $panelUsername = $usernameData['panel_username'];
             $usernamePrefix = $usernameData['prefix'];
             
