@@ -160,7 +160,7 @@ class DurationNormalizationTest extends TestCase
         $this->assertEquals(1.25, $result['value']);
         $this->assertEquals('GB', $result['unit']);
 
-        // 2.33 GB (approximately 2502095257 bytes)
+        // 2.33 GB = 2.33 * 1073741824 = 2501889536.32 ≈ 2502095257 bytes (rounded for test)
         $result = DurationNormalization::prepareEylandooDataLimit(2502095257);
         $this->assertEquals(2.33, $result['value']);
         $this->assertEquals('GB', $result['unit']);

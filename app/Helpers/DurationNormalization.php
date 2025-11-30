@@ -49,7 +49,8 @@ class DurationNormalization
         // This ensures no compatibility issues with panels that expect full days
         $days = (int) ceil($seconds / self::SECONDS_PER_DAY);
 
-        // Minimum of 1 day for any positive value
+        // max(1, $days) is a defensive safeguard. For any positive seconds value,
+        // ceil() will always return at least 1, but we keep this for safety.
         return max(1, $days);
     }
 

@@ -75,7 +75,7 @@ class ServiceNormalizationIntegrationTest extends TestCase
             'https://test-panel.example.com',
             'admin',
             'password',
-            ''
+            'https://node.example.com'
         );
 
         $service->login();
@@ -251,7 +251,7 @@ class ServiceNormalizationIntegrationTest extends TestCase
             'https://test-panel.example.com',
             'admin',
             'password',
-            ''
+            'https://node.example.com'
         );
 
         $service->login();
