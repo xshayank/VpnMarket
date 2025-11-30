@@ -201,6 +201,71 @@ class UsernameGenerator
     }
 
     /**
+     * Extract a display-friendly prefix from a panel-created username
+     * 
+     * This method handles various naming patterns including:
+     * - Standard format: "ali_abc123" -> "ali"
+     * - Legacy format: "user_123_cfg_456" -> "user"
+     * - Panel-created: "ali_MN(EL)_5k2h9" -> "ali"
+     * - Simple numeric: "Z2733" -> "Z2733"
+     * - Order format: "user_4_order_84" -> "user"
+     * 
+     * The extraction uses heuristics to find the first meaningful alphanumeric token:
+     * 1. Split by common separators (_, -)
+     * 2. Take the first alphanumeric token
+     * 3. Clean and truncate to safe length
+     * 
+     * @param  string  $panelUsername  The full panel username
+     * @param  int  $maxLength  Maximum length of extracted prefix (default 16)
+     * @return string The extracted display prefix
+     */
+    public function extractDisplayPrefix(string $panelUsername, int $maxLength = 16): string
+    {
+        // If empty, return empty
+        if (empty($panelUsername)) {
+            return '';
+        }
+
+        // Clean whitespace
+        $username = trim($panelUsername);
+
+        // If no separators found, clean and return the whole username
+        if (strpos($username, '_') === false && strpos($username, '-') === false) {
+            // Keep only alphanumeric characters
+            $cleaned = preg_replace('/[^a-zA-Z0-9]/', '', $username);
+            return substr($cleaned, 0, $maxLength);
+        }
+
+        // Split by common separators
+        $tokens = preg_split('/[_\-]+/', $username);
+
+        // Find first meaningful alphanumeric token
+        foreach ($tokens as $token) {
+            // Clean the token - keep only alphanumeric
+            $cleaned = preg_replace('/[^a-zA-Z0-9]/', '', $token);
+
+            // Skip empty tokens or purely numeric tokens that look like IDs/sequences
+            if (empty($cleaned)) {
+                continue;
+            }
+
+            // If token has at least one letter, it's likely a meaningful prefix
+            if (preg_match('/[a-zA-Z]/', $cleaned)) {
+                return substr($cleaned, 0, $maxLength);
+            }
+
+            // If all numeric but this is the first token and no letters found, use it
+            if (preg_match('/^[0-9]+$/', $cleaned) && $token === $tokens[0]) {
+                return substr($cleaned, 0, $maxLength);
+            }
+        }
+
+        // Fallback: just clean the whole username and truncate
+        $cleaned = preg_replace('/[^a-zA-Z0-9]/', '', $username);
+        return substr($cleaned, 0, $maxLength);
+    }
+
+    /**
      * Check if a panel username exists in the local database
      *
      * @param  string  $panelUsername  The username to check

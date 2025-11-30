@@ -235,4 +235,128 @@ class ResellerConfigsManagerTest extends TestCase
             ->set('perPage', 30)
             ->assertSet('perPage', 30);
     }
+
+    public function test_configs_manager_has_username_prefix_field(): void
+    {
+        ['user' => $user] = $this->createWalletReseller();
+
+        $this->actingAs($user);
+
+        Livewire::test(ConfigsManager::class)
+            ->call('openCreateModal')
+            ->assertSet('showCreateModal', true)
+            // Assert that usernamePrefix field exists and is empty by default
+            ->assertSet('usernamePrefix', '')
+            // Set a username prefix
+            ->set('usernamePrefix', 'testali')
+            ->assertSet('usernamePrefix', 'testali');
+    }
+
+    public function test_configs_manager_validates_username_prefix(): void
+    {
+        ['user' => $user] = $this->createWalletReseller();
+
+        $this->actingAs($user);
+
+        // Test validation: too short
+        Livewire::test(ConfigsManager::class)
+            ->call('openCreateModal')
+            ->set('usernamePrefix', 'a')
+            ->set('selectedPanelId', 1)
+            ->set('trafficLimitGb', 10)
+            ->set('expiresDays', 30)
+            ->call('createConfig')
+            ->assertHasErrors(['usernamePrefix']);
+    }
+
+    public function test_display_username_extracts_prefix_from_panel_created_config(): void
+    {
+        ['user' => $user, 'reseller' => $reseller, 'panel' => $panel] = $this->createWalletReseller();
+
+        // Create config with panel-created style name (no username_prefix)
+        $config = ResellerConfig::create([
+            'reseller_id' => $reseller->id,
+            'external_username' => 'ali_MN_5k2h9',
+            'panel_username' => 'ali_MN_5k2h9',
+            'username_prefix' => null, // No prefix set (panel-created)
+            'traffic_limit_bytes' => 10737418240,
+            'usage_bytes' => 0,
+            'expires_at' => now()->addDays(30),
+            'status' => 'active',
+            'panel_type' => 'marzneshin',
+            'panel_id' => $panel->id,
+            'created_by' => $user->id,
+        ]);
+
+        // Refresh to get the accessor
+        $config->refresh();
+
+        // The display_username accessor should extract 'ali' from 'ali_MN_5k2h9'
+        $this->assertEquals('ali', $config->display_username);
+    }
+
+    public function test_display_username_returns_username_prefix_when_set(): void
+    {
+        ['user' => $user, 'reseller' => $reseller, 'panel' => $panel] = $this->createWalletReseller();
+
+        $config = ResellerConfig::create([
+            'reseller_id' => $reseller->id,
+            'external_username' => 'complicated_name_abc123',
+            'panel_username' => 'complicated_name_abc123',
+            'username_prefix' => 'myprefix', // Explicit prefix set
+            'traffic_limit_bytes' => 10737418240,
+            'usage_bytes' => 0,
+            'expires_at' => now()->addDays(30),
+            'status' => 'active',
+            'panel_type' => 'marzneshin',
+            'panel_id' => $panel->id,
+            'created_by' => $user->id,
+        ]);
+
+        $config->refresh();
+
+        // Should return the explicit username_prefix
+        $this->assertEquals('myprefix', $config->display_username);
+    }
+
+    public function test_display_username_handles_various_panel_created_formats(): void
+    {
+        ['user' => $user, 'reseller' => $reseller, 'panel' => $panel] = $this->createWalletReseller();
+
+        // Test case: "user_4_order_84" -> "user"
+        $config1 = ResellerConfig::create([
+            'reseller_id' => $reseller->id,
+            'external_username' => 'user_4_order_84',
+            'panel_username' => 'user_4_order_84',
+            'username_prefix' => null,
+            'traffic_limit_bytes' => 10737418240,
+            'usage_bytes' => 0,
+            'expires_at' => now()->addDays(30),
+            'status' => 'active',
+            'panel_type' => 'marzneshin',
+            'panel_id' => $panel->id,
+            'created_by' => $user->id,
+        ]);
+
+        // Test case: "Z2733" (no underscore) -> "Z2733"
+        $config2 = ResellerConfig::create([
+            'reseller_id' => $reseller->id,
+            'external_username' => 'Z2733',
+            'panel_username' => 'Z2733',
+            'username_prefix' => null,
+            'traffic_limit_bytes' => 10737418240,
+            'usage_bytes' => 0,
+            'expires_at' => now()->addDays(30),
+            'status' => 'active',
+            'panel_type' => 'marzneshin',
+            'panel_id' => $panel->id,
+            'created_by' => $user->id,
+        ]);
+
+        $config1->refresh();
+        $config2->refresh();
+
+        $this->assertEquals('user', $config1->display_username);
+        $this->assertEquals('Z2733', $config2->display_username);
+    }
 }

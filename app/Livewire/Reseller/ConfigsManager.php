@@ -37,6 +37,7 @@ class ConfigsManager extends Component
     public ?int $editingConfigId = null;
 
     // Create/Edit form fields
+    public $usernamePrefix = '';  // New: Username field (prefix) shown to users
     public $selectedPanelId = '';
     public $trafficLimitGb = '';
     public $expiresDays = '';
@@ -61,6 +62,7 @@ class ConfigsManager extends Component
     protected function rules()
     {
         return [
+            'usernamePrefix' => 'nullable|string|min:2|max:32|regex:/^[a-zA-Z0-9]+$/',
             'selectedPanelId' => 'required|exists:panels,id',
             'trafficLimitGb' => 'required|numeric|min:0.1',
             'expiresDays' => 'required|integer|min:1',
@@ -194,6 +196,7 @@ class ConfigsManager extends Component
 
     protected function resetCreateForm()
     {
+        $this->usernamePrefix = '';
         $this->selectedPanelId = '';
         $this->trafficLimitGb = '';
         $this->expiresDays = '';
@@ -212,6 +215,17 @@ class ConfigsManager extends Component
             'trafficLimitGb' => 'required|numeric|min:0.1',
             'expiresDays' => 'required|integer|min:1',
         ]);
+
+        // Validate usernamePrefix if provided
+        if ($this->usernamePrefix) {
+            $this->validate([
+                'usernamePrefix' => 'string|min:2|max:32|regex:/^[a-zA-Z0-9]+$/',
+            ], [
+                'usernamePrefix.min' => 'نام کاربری باید حداقل ۲ کاراکتر باشد.',
+                'usernamePrefix.max' => 'نام کاربری نمی‌تواند بیش از ۳۲ کاراکتر باشد.',
+                'usernamePrefix.regex' => 'نام کاربری فقط می‌تواند شامل حروف و اعداد انگلیسی باشد.',
+            ]);
+        }
 
         $reseller = $this->reseller;
 
@@ -247,6 +261,8 @@ class ConfigsManager extends Component
 
                 $prefix = null;
                 $customName = null;
+                $storedUsernamePrefix = null;
+                $panelUsername = null;
 
                 if ($user->can('configs.set_prefix') && $this->prefix) {
                     $prefix = $this->prefix;
@@ -256,11 +272,28 @@ class ConfigsManager extends Component
                     $customName = $this->customName;
                 }
 
+                // Use usernamePrefix to generate panel username if provided
+                if ($this->usernamePrefix) {
+                    $usernameGenerator = new \App\Services\UsernameGenerator();
+                    $sanitizedPrefix = $usernameGenerator->sanitizePrefix($this->usernamePrefix);
+                    $generatedData = $usernameGenerator->generatePanelUsername($sanitizedPrefix);
+                    $panelUsername = $generatedData['panel_username'];
+                    $storedUsernamePrefix = $generatedData['username_prefix'];
+                }
+
                 $username = '';
                 $nameVersion = null;
 
                 if ($customName) {
                     $username = $customName;
+                    // If custom name is used, derive display prefix from it
+                    if (!$storedUsernamePrefix) {
+                        $usernameGenerator = new \App\Services\UsernameGenerator();
+                        $storedUsernamePrefix = $usernameGenerator->extractDisplayPrefix($customName);
+                    }
+                } elseif ($panelUsername) {
+                    // Use the generated panel username from usernamePrefix
+                    $username = $panelUsername;
                 } else {
                     $generator = new ConfigNameGenerator;
                     $generatorOptions = [];
@@ -270,11 +303,19 @@ class ConfigsManager extends Component
                     $nameData = $generator->generate($reseller, $panel, $reseller->type, $generatorOptions);
                     $username = $nameData['name'];
                     $nameVersion = $nameData['version'];
+                    
+                    // Extract display prefix from generated name if not already set
+                    if (!$storedUsernamePrefix) {
+                        $usernameGenerator = new \App\Services\UsernameGenerator();
+                        $storedUsernamePrefix = $usernameGenerator->extractDisplayPrefix($username);
+                    }
                 }
 
                 $config = ResellerConfig::create([
                     'reseller_id' => $reseller->id,
                     'external_username' => $username,
+                    'username_prefix' => $storedUsernamePrefix,
+                    'panel_username' => $panelUsername ?: $username,
                     'name_version' => $nameVersion,
                     'comment' => $this->comment ?: null,
                     'prefix' => $prefix,

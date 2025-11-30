@@ -409,6 +409,16 @@
                         </div>
 
                         <form wire:submit="createConfig" class="space-y-4">
+                            {{-- Username (Prefix) - First Input --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری</label>
+                                <input type="text" wire:model="usernamePrefix" maxlength="32"
+                                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500"
+                                       placeholder="مثال: ali">
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">فقط حروف و اعداد انگلیسی (۲ تا ۳۲ کاراکتر). این نام به کاربر نمایش داده می‌شود.</p>
+                                @error('usernamePrefix') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+                            </div>
+
                             {{-- Panel Selection --}}
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">انتخاب پنل</label>
