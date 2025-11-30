@@ -9,6 +9,9 @@
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
+        <!-- Livewire Styles -->
+        @livewireStyles
+
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
@@ -38,5 +41,8 @@
         </div>
         
         @stack('scripts')
+        
+        <!-- Livewire Scripts -->
+        @livewireScripts
     </body>
 </html>
