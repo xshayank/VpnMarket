@@ -210,6 +210,14 @@ class ConfigsManager extends Component
 
     public function createConfig()
     {
+        // Debug logging for input values to aid diagnostics
+        Log::debug('ConfigsManager::createConfig - Input values', [
+            'expiresDays' => $this->expiresDays,
+            'expiresDays_type' => gettype($this->expiresDays),
+            'trafficLimitGb' => $this->trafficLimitGb,
+            'selectedPanelId' => $this->selectedPanelId,
+        ]);
+
         // Validate all required fields plus usernamePrefix with custom error messages
         $this->validate([
             'selectedPanelId' => 'required|exists:panels,id',
@@ -220,6 +228,9 @@ class ConfigsManager extends Component
             'usernamePrefix.min' => 'نام کاربری باید حداقل ۲ کاراکتر باشد.',
             'usernamePrefix.max' => 'نام کاربری نمی‌تواند بیش از ۳۲ کاراکتر باشد.',
             'usernamePrefix.regex' => 'نام کاربری فقط می‌تواند شامل حروف و اعداد انگلیسی باشد.',
+            'expiresDays.required' => 'مدت زمان انقضا الزامی است.',
+            'expiresDays.integer' => 'مدت زمان انقضا باید یک عدد صحیح باشد.',
+            'expiresDays.min' => 'مدت زمان انقضا باید حداقل ۱ روز باشد.',
         ]);
 
         $reseller = $this->reseller;
@@ -248,17 +259,35 @@ class ConfigsManager extends Component
 
         // Cast expiresDays to int to prevent TypeError in Carbon::addDays()
         // Livewire form inputs are strings even with 'integer' validation
-        $expiresDaysInt = (int) $this->expiresDays;
-        if ($expiresDaysInt < 1) {
-            session()->flash('error', 'Invalid expiry days value.');
+        // Use is_numeric guard for additional safety before casting
+        if (!is_numeric($this->expiresDays)) {
+            Log::warning('ConfigsManager::createConfig - expiresDays is not numeric', [
+                'expiresDays' => $this->expiresDays,
+                'type' => gettype($this->expiresDays),
+            ]);
+            session()->flash('error', 'مدت زمان انقضا باید یک عدد معتبر باشد.');
             return;
         }
+        $expiresDaysInt = (int) $this->expiresDays;
+        if ($expiresDaysInt < 1) {
+            Log::warning('ConfigsManager::createConfig - expiresDaysInt is less than 1', [
+                'expiresDaysInt' => $expiresDaysInt,
+            ]);
+            session()->flash('error', 'مدت زمان انقضا باید حداقل ۱ روز باشد.');
+            return;
+        }
+
+        // Log the computed expiry path (using days)
+        Log::debug('ConfigsManager::createConfig - Using days-based expiry', [
+            'expiresDaysInt' => $expiresDaysInt,
+        ]);
+
         $expiresAt = now()->addDays($expiresDaysInt)->startOfDay();
         $nodeIds = array_map('intval', (array) $this->selectedNodeIds);
         $maxClients = (int) ($this->maxClients ?: 1);
 
         try {
-            DB::transaction(function () use ($reseller, $panel, $trafficLimitBytes, $expiresAt, $nodeIds, $maxClients) {
+            DB::transaction(function () use ($reseller, $panel, $trafficLimitBytes, $expiresAt, $nodeIds, $maxClients, $expiresDaysInt) {
                 $provisioner = new ResellerProvisioner;
                 $user = Auth::user();
 
