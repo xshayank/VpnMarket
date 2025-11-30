@@ -239,6 +239,9 @@ class UsernameGenerator
         // Split by common separators
         $tokens = preg_split('/[_\-]+/', $username);
 
+        // Clean the first token for comparison
+        $firstTokenCleaned = !empty($tokens[0]) ? preg_replace('/[^a-zA-Z0-9]/', '', $tokens[0]) : '';
+
         // Find first meaningful alphanumeric token
         foreach ($tokens as $token) {
             // Clean the token - keep only alphanumeric
@@ -254,8 +257,8 @@ class UsernameGenerator
                 return substr($cleaned, 0, $maxLength);
             }
 
-            // If all numeric but this is the first token and no letters found, use it
-            if (preg_match('/^[0-9]+$/', $cleaned) && $token === $tokens[0]) {
+            // If all numeric but this is the first token and no letters found yet, use it
+            if (preg_match('/^[0-9]+$/', $cleaned) && $cleaned === $firstTokenCleaned) {
                 return substr($cleaned, 0, $maxLength);
             }
         }

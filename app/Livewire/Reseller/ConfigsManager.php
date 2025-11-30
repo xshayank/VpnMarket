@@ -210,22 +210,17 @@ class ConfigsManager extends Component
 
     public function createConfig()
     {
+        // Validate all required fields plus usernamePrefix with custom error messages
         $this->validate([
             'selectedPanelId' => 'required|exists:panels,id',
             'trafficLimitGb' => 'required|numeric|min:0.1',
             'expiresDays' => 'required|integer|min:1',
+            'usernamePrefix' => 'nullable|string|min:2|max:32|regex:/^[a-zA-Z0-9]+$/',
+        ], [
+            'usernamePrefix.min' => 'نام کاربری باید حداقل ۲ کاراکتر باشد.',
+            'usernamePrefix.max' => 'نام کاربری نمی‌تواند بیش از ۳۲ کاراکتر باشد.',
+            'usernamePrefix.regex' => 'نام کاربری فقط می‌تواند شامل حروف و اعداد انگلیسی باشد.',
         ]);
-
-        // Validate usernamePrefix if provided
-        if ($this->usernamePrefix) {
-            $this->validate([
-                'usernamePrefix' => 'string|min:2|max:32|regex:/^[a-zA-Z0-9]+$/',
-            ], [
-                'usernamePrefix.min' => 'نام کاربری باید حداقل ۲ کاراکتر باشد.',
-                'usernamePrefix.max' => 'نام کاربری نمی‌تواند بیش از ۳۲ کاراکتر باشد.',
-                'usernamePrefix.regex' => 'نام کاربری فقط می‌تواند شامل حروف و اعداد انگلیسی باشد.',
-            ]);
-        }
 
         $reseller = $this->reseller;
 
