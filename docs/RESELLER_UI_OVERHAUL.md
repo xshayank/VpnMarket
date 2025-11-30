@@ -10,6 +10,8 @@ The reseller dashboard has been redesigned with a modern, Marzban-inspired UI th
 - Integrated users/configs management with table view
 - Modal-based create/edit functionality with blur backdrop
 - Enhanced filtering, search, and pagination controls
+- QR code generation for subscription URLs
+- Full interactivity with Livewire-powered buttons
 
 ## Key Features
 
@@ -21,35 +23,52 @@ Four gradient-styled cards displayed horizontally at the top:
 - **Traffic Price**: Price per GB for the reseller
 - **Active Configs**: Count of active configs out of total
 
+Header action buttons:
+- **Refresh Button**: Reloads stats from the server
+- **Charge Wallet**: Link to wallet charge form
+
 ### 2. Users Section
 
 #### Controls Row
-- **Search Input**: Filter by username prefix or comment
-- **Tab Filters**: All, Active, Disabled, Expiring Soon
+- **Search Input**: Debounced search (300ms) by username prefix or comment (case-insensitive)
+- **Tab Filters**: All, Active, Disabled, Expiring Soon (7 days)
 - **Refresh Button**: Reload the list without page refresh
 - **Create User Button**: Opens the create modal
+
+All filter and action buttons use `type="button"` to prevent unintended form submissions.
 
 #### Table Columns
 - **Username**: Displays only the prefix (not full `panel_username`) using `getDisplayUsernameAttribute()`
 - **Status**: Badge with Active/Disabled state and animated indicator
 - **Expiry Date**: Shows days remaining with color-coded warnings
 - **Data Usage**: Horizontal progress bar with percentage and total usage
+  - Blue (<80% usage)
+  - Amber (80-95% usage)
+  - Red (>95% usage)
 
 #### Row Actions
+All row actions include loading states and use `type="button"` to prevent form submits:
 - **Edit** (pencil icon): Opens edit modal
 - **Copy Link** (chain icon): Copies subscription URL to clipboard
-- **QR Code** (grid icon): Opens QR code modal
-- **Toggle Status**: Enable/disable config
+- **QR Code** (grid icon): Opens QR code modal with generated QR
+- **Toggle Status**: Enable/disable config with confirmation
 - **Delete** (trash icon): Removes config with confirmation
 
 ### 3. Modal Behavior
 
 Both Create and Edit modals feature:
-- **Blur backdrop**: `backdrop-blur-sm` effect behind the modal
+- **Blur backdrop**: `backdrop-blur-sm` effect with `bg-gray-900/60` overlay
 - **Centered positioning**: Responsive on all screen sizes
 - **Smooth transitions**: Using Tailwind's transition classes
-- **Form validation**: Client and server-side validation
+- **Form validation**: Server-side validation with error display
 - **Loading states**: Visual feedback during form submission
+- **Close on backdrop click**: Click outside modal to close it
+
+#### Edit Modal Features
+- Displays config info (username prefix and current usage)
+- Copy subscription link button
+- QR code button (opens QR modal)
+- Form fields for traffic limit, expiry date, and max clients (Eylandoo panels)
 
 ### 4. Username Display Rule
 
@@ -69,7 +88,15 @@ public function getDisplayUsernameAttribute(): string
 }
 ```
 
-### 5. Pagination and Tabs
+### 5. Search and Filters
+
+- **Search**: Debounced (300ms) search that matches:
+  - `external_username` containing the search term
+  - `username_prefix` containing the search term
+  - `comment` containing the search term
+- Search term is preserved across pagination and tab switches via URL query parameters
+
+### 6. Pagination and Tabs
 
 - **Items Per Page**: Selector offering 10/20/30 options
 - **Tab Filters**:
@@ -77,6 +104,15 @@ public function getDisplayUsernameAttribute(): string
   - Active: Only status='active'
   - Disabled: Only status='disabled'
   - Expiring Soon: Active configs expiring within 7 days
+- Changing tab or per-page resets pagination to page 1
+
+### 7. QR Code Modal
+
+- Generates QR code on-the-fly using QRCode.js library
+- Shows subscription URL as QR code with white background
+- Includes "Copy Link" button below QR code
+- Backdrop blur effect for modal overlay
+- Click outside to close
 
 ## Components
 
@@ -87,6 +123,19 @@ public function getDisplayUsernameAttribute(): string
 - Modal state management (create/edit)
 - CRUD operations for configs
 - Stats loading and refresh
+- URL-synced search, filter, and pagination parameters
+
+### Livewire Methods
+
+All buttons are wired to these Livewire methods:
+- `setStatusFilter($status)` - Tab filtering
+- `openCreateModal()` / `closeCreateModal()` - Create modal
+- `openEditModal($configId)` / `closeEditModal()` - Edit modal
+- `syncStats()` - Refresh stats
+- `toggleStatus($configId)` - Enable/disable config
+- `deleteConfig($configId)` - Remove config
+- `createConfig()` - Form submission for create
+- `updateConfig()` - Form submission for edit
 
 ### Progress Bar Component
 
@@ -118,12 +167,14 @@ The UI uses Tailwind CSS with:
 - **Dark mode support**: All elements have dark mode variants
 - **Responsive design**: Mobile-first with breakpoints at sm/md/lg
 - **RTL support**: `dir="rtl"` with proper text alignment
+- **Button type safety**: All non-submit buttons use `type="button"`
+- **Loading indicators**: Spinner animations during Livewire actions
 
 ## File Changes
 
 - `Modules/Reseller/resources/views/dashboard.blade.php` - Updated to use Livewire component
-- `app/Livewire/Reseller/ConfigsManager.php` - New Livewire component
-- `resources/views/livewire/reseller/configs-manager.blade.php` - Livewire view
+- `app/Livewire/Reseller/ConfigsManager.php` - Livewire component with full CRUD
+- `resources/views/livewire/reseller/configs-manager.blade.php` - Livewire view with modals
 - `resources/views/components/progress-bar.blade.php` - Reusable progress bar
 
 ## Dependencies
@@ -132,3 +183,14 @@ The UI uses Tailwind CSS with:
 - **Alpine.js**: For client-side interactivity (bundled with Livewire)
 - **Tailwind CSS**: For styling (already in project)
 - **QRCode.js**: For QR code generation (`/vendor/qrcode.min.js`)
+
+## Testing
+
+Tests are available in:
+- `tests/Feature/ResellerConfigsManagerTest.php` - Basic component tests
+- `tests/Feature/ResellerConfigsManagerButtonsTest.php` - Comprehensive button/action tests
+
+Run tests with:
+```bash
+./vendor/bin/pest tests/Feature/ResellerConfigsManager*
+```
