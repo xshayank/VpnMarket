@@ -181,7 +181,7 @@ class ExpiryNormalizer
 
         // Check for unrealistic durations (> 10 years)
         if ($days > self::MAX_DURATION_DAYS) {
-            $this->result['warnings'][] = "Duration {$days} days exceeds maximum ({$this->getMaxDurationDays()} days), capping to maximum";
+            $this->result['warnings'][] = "Duration {$days} days exceeds maximum (".self::MAX_DURATION_DAYS." days), capping to maximum";
             $days = self::MAX_DURATION_DAYS;
         }
 
