@@ -121,7 +121,7 @@
                 </svg>
                 شارژ کیف پول
             </a>
-            <button wire:click="syncStats" 
+            <button type="button" wire:click="syncStats" 
                     class="inline-flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors">
                 <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.class="animate-spin" wire:target="syncStats">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -152,19 +152,19 @@
 
                         {{-- Tab Filter --}}
                         <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-                            <button wire:click="setStatusFilter('all')" 
+                            <button type="button" wire:click="setStatusFilter('all')" 
                                     class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {{ $statusFilter === 'all' ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' }}">
                                 همه
                             </button>
-                            <button wire:click="setStatusFilter('active')" 
+                            <button type="button" wire:click="setStatusFilter('active')" 
                                     class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {{ $statusFilter === 'active' ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' }}">
                                 فعال
                             </button>
-                            <button wire:click="setStatusFilter('disabled')" 
+                            <button type="button" wire:click="setStatusFilter('disabled')" 
                                     class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {{ $statusFilter === 'disabled' ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' }}">
                                 غیرفعال
                             </button>
-                            <button wire:click="setStatusFilter('expiring')" 
+                            <button type="button" wire:click="setStatusFilter('expiring')" 
                                     class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {{ $statusFilter === 'expiring' ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' }}">
                                 در حال انقضا
                             </button>
@@ -173,14 +173,14 @@
 
                     {{-- Action Buttons --}}
                     <div class="flex gap-2">
-                        <button wire:click="$refresh" 
+                        <button type="button" wire:click="$refresh" 
                                 class="p-2.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                 title="بروزرسانی لیست">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.class="animate-spin" wire:target="$refresh">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                             </svg>
                         </button>
-                        <button wire:click="openCreateModal" 
+                        <button type="button" wire:click="openCreateModal" 
                                 class="inline-flex items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
                             <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
@@ -276,7 +276,7 @@
                                     <div class="w-32 md:w-40">
                                         {{-- Progress Bar --}}
                                         <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-1.5">
-                                            <div class="h-2 rounded-full transition-all duration-300 {{ $usagePercent >= 90 ? 'bg-red-500' : ($usagePercent >= 70 ? 'bg-amber-500' : 'bg-blue-500') }}" 
+                                            <div class="h-2 rounded-full transition-all duration-300 {{ $usagePercent > 95 ? 'bg-red-500' : ($usagePercent >= 80 ? 'bg-amber-500' : 'bg-blue-500') }}" 
                                                  style="width: {{ $usagePercent }}%"></div>
                                         </div>
                                         {{-- Usage Text --}}
@@ -295,7 +295,7 @@
                                 <td class="px-4 py-4" wire:click.stop>
                                     <div class="flex items-center gap-1">
                                         {{-- Edit Button --}}
-                                        <button wire:click="openEditModal({{ $config->id }})" 
+                                        <button type="button" wire:click="openEditModal({{ $config->id }})" 
                                                 class="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                                                 title="ویرایش">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -305,7 +305,7 @@
 
                                         {{-- Copy Subscription Link --}}
                                         @if ($config->subscription_url)
-                                            <button onclick="navigator.clipboard.writeText('{{ $config->subscription_url }}'); alert('لینک کپی شد!');" 
+                                            <button type="button" onclick="navigator.clipboard.writeText('{{ $config->subscription_url }}'); alert('لینک کپی شد!');" 
                                                     class="p-2 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors"
                                                     title="کپی لینک">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -314,7 +314,7 @@
                                             </button>
 
                                             {{-- QR Code Button --}}
-                                            <button @click="showQR = true; qrUrl = '{{ $config->subscription_url }}'" 
+                                            <button type="button" @click="showQR = true; qrUrl = '{{ $config->subscription_url }}'" 
                                                     class="p-2 text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
                                                     title="QR Code">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -324,7 +324,7 @@
                                         @endif
 
                                         {{-- Toggle Status --}}
-                                        <button wire:click="toggleStatus({{ $config->id }})" 
+                                        <button type="button" wire:click="toggleStatus({{ $config->id }})" 
                                                 wire:confirm="آیا مطمئن هستید؟"
                                                 class="p-2 text-gray-600 dark:text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
                                                 title="{{ $config->isActive() ? 'غیرفعال کردن' : 'فعال کردن' }}">
@@ -340,7 +340,7 @@
                                         </button>
 
                                         {{-- Delete Button --}}
-                                        <button wire:click="deleteConfig({{ $config->id }})" 
+                                        <button type="button" wire:click="deleteConfig({{ $config->id }})" 
                                                 wire:confirm="آیا از حذف این کانفیگ اطمینان دارید؟"
                                                 class="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                                                 title="حذف">
@@ -359,7 +359,7 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                                         </svg>
                                         <p class="text-gray-500 dark:text-gray-400 text-sm">هیچ کانفیگی یافت نشد</p>
-                                        <button wire:click="openCreateModal" class="mt-4 text-blue-600 dark:text-blue-400 hover:underline text-sm">
+                                        <button type="button" wire:click="openCreateModal" class="mt-4 text-blue-600 dark:text-blue-400 hover:underline text-sm">
                                             اولین کانفیگ خود را ایجاد کنید
                                         </button>
                                     </div>
@@ -401,7 +401,7 @@
                     <div class="px-6 pt-5 pb-4">
                         <div class="flex items-center justify-between mb-4">
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">ایجاد کاربر جدید</h3>
-                            <button wire:click="closeCreateModal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
+                            <button type="button" wire:click="closeCreateModal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                 </svg>
@@ -528,7 +528,7 @@
                     <div class="px-6 pt-5 pb-4">
                         <div class="flex items-center justify-between mb-4">
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">ویرایش کاربر</h3>
-                            <button wire:click="closeEditModal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
+                            <button type="button" wire:click="closeEditModal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                 </svg>
@@ -544,6 +544,27 @@
                                 <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                     <strong>مصرف فعلی:</strong> {{ round($editConfig->usage_bytes / (1024 * 1024 * 1024), 2) }} GB
                                 </p>
+                                {{-- Subscription Link Actions --}}
+                                @if ($editConfig->subscription_url)
+                                    <div class="mt-3 flex gap-2">
+                                        <button type="button" 
+                                                onclick="navigator.clipboard.writeText('{{ $editConfig->subscription_url }}'); this.textContent = 'کپی شد!'; setTimeout(() => this.innerHTML = '<svg class=\'w-4 h-4 inline ml-1\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1\'/></svg>کپی لینک', 2000)"
+                                                class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors">
+                                            <svg class="w-4 h-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                                            </svg>
+                                            کپی لینک
+                                        </button>
+                                        <button type="button" 
+                                                @click="showQR = true; qrUrl = '{{ $editConfig->subscription_url }}'"
+                                                class="inline-flex items-center px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg transition-colors">
+                                            <svg class="w-4 h-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                                            </svg>
+                                            QR Code
+                                        </button>
+                                    </div>
+                                @endif
                             </div>
 
                             <form wire:submit="updateConfig" class="space-y-4">
@@ -599,6 +620,26 @@
     {{-- QR Code Modal --}}
     <div x-show="showQR" 
          x-cloak
+         x-init="$watch('showQR', value => {
+             if (value && qrUrl) {
+                 $nextTick(() => {
+                     const container = $refs.qrContainer;
+                     if (container) {
+                         container.innerHTML = '';
+                         if (typeof QRCode !== 'undefined') {
+                             new QRCode(container, {
+                                 text: qrUrl,
+                                 width: 200,
+                                 height: 200,
+                                 colorDark: '#000000',
+                                 colorLight: '#ffffff',
+                                 correctLevel: QRCode.CorrectLevel.H
+                             });
+                         }
+                     }
+                 });
+             }
+         })"
          class="fixed inset-0 z-50 overflow-y-auto"
          x-transition:enter="ease-out duration-300"
          x-transition:enter-start="opacity-0"
@@ -611,14 +652,22 @@
             <div class="relative bg-white dark:bg-gray-800 rounded-xl p-6 max-w-sm w-full shadow-xl">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">QR Code</h3>
-                    <button @click="showQR = false" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
+                    <button type="button" @click="showQR = false" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
                     </button>
                 </div>
-                <div x-ref="qrContainer" class="flex justify-center bg-white p-4 rounded-lg">
+                <div x-ref="qrContainer" class="flex justify-center bg-white p-4 rounded-lg min-h-[232px]">
                     {{-- QR will be generated here --}}
+                </div>
+                {{-- Copy URL button below QR --}}
+                <div class="mt-4 flex justify-center">
+                    <button type="button" 
+                            @click="navigator.clipboard.writeText(qrUrl); $el.textContent = 'کپی شد!'; setTimeout(() => $el.textContent = 'کپی لینک', 2000)"
+                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+                        کپی لینک
+                    </button>
                 </div>
             </div>
         </div>
@@ -627,12 +676,5 @@
     {{-- QR Code Script --}}
     @push('scripts')
     <script src="{{ asset('vendor/qrcode.min.js') }}"></script>
-    <script>
-        document.addEventListener('alpine:init', () => {
-            Alpine.effect(() => {
-                const data = Alpine.store('qrData');
-            });
-        });
-    </script>
     @endpush
 </div>
