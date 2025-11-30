@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Helpers\DurationNormalization;
 use App\Helpers\OwnerExtraction;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -77,7 +78,16 @@ class MarzneshinService
 
             if ($expireStrategy === 'start_on_first_use') {
                 // Require usage_duration (seconds) for start_on_first_use
-                $apiData['usage_duration'] = (int) ($userData['usage_duration'] ?? 0);
+                // Convert seconds to days for panel compatibility
+                $usageDurationSeconds = (int) ($userData['usage_duration'] ?? 0);
+                $usageDurationDays = DurationNormalization::normalizeUsageDurationSecondsToDays($usageDurationSeconds);
+                $apiData['usage_duration'] = $usageDurationDays;
+
+                Log::info('Marzneshin start_on_first_use duration conversion', [
+                    'input_seconds' => $usageDurationSeconds,
+                    'output_days' => $usageDurationDays,
+                    'username' => $userData['username'],
+                ]);
             } elseif ($expireStrategy === 'never') {
                 // For "never" strategy, do not send expire_date or usage_duration
             } else {
@@ -142,7 +152,16 @@ class MarzneshinService
                 $apiData['expire_strategy'] = $expireStrategy;
 
                 if ($expireStrategy === 'start_on_first_use' && isset($userData['usage_duration'])) {
-                    $apiData['usage_duration'] = (int) $userData['usage_duration'];
+                    // Convert seconds to days for panel compatibility
+                    $usageDurationSeconds = (int) $userData['usage_duration'];
+                    $usageDurationDays = DurationNormalization::normalizeUsageDurationSecondsToDays($usageDurationSeconds);
+                    $apiData['usage_duration'] = $usageDurationDays;
+
+                    Log::info('Marzneshin update start_on_first_use duration conversion', [
+                        'input_seconds' => $usageDurationSeconds,
+                        'output_days' => $usageDurationDays,
+                        'username' => $username,
+                    ]);
                 } elseif ($expireStrategy === 'fixed_date' && isset($userData['expire'])) {
                     $apiData['expire_date'] = $this->convertTimestampToIso8601((int) $userData['expire']);
                 } elseif ($expireStrategy === 'fixed_date' && isset($userData['expire_date'])) {

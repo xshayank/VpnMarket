@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Helpers\DurationNormalization;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -52,11 +53,19 @@ class EylandooService
             }
 
             // Add data_limit - Eylandoo expects the limit in the specified unit
+            // Use MB for values < 1 GB, GB for values >= 1 GB
             if (isset($userData['data_limit']) && $userData['data_limit'] !== null) {
-                // Convert bytes to GB for Eylandoo
-                $dataLimitGB = round($userData['data_limit'] / (1024 * 1024 * 1024), 2);
-                $payload['data_limit'] = $dataLimitGB;
-                $payload['data_limit_unit'] = 'GB';
+                $dataLimitBytes = (int) $userData['data_limit'];
+                $dataLimitResult = DurationNormalization::prepareEylandooDataLimit($dataLimitBytes);
+                $payload['data_limit'] = $dataLimitResult['value'];
+                $payload['data_limit_unit'] = $dataLimitResult['unit'];
+
+                Log::info('Eylandoo data limit conversion', [
+                    'input_bytes' => $dataLimitBytes,
+                    'output_value' => $dataLimitResult['value'],
+                    'output_unit' => $dataLimitResult['unit'],
+                    'username' => $userData['username'],
+                ]);
             }
 
             // Add expiry date if provided
@@ -337,14 +346,22 @@ class EylandooService
             }
 
             // Update data_limit if provided
+            // Use MB for values < 1 GB, GB for values >= 1 GB
             if (array_key_exists('data_limit', $userData)) {
                 if ($userData['data_limit'] === null) {
                     $payload['data_limit'] = null; // Unlimited
                 } else {
-                    // Convert bytes to GB for Eylandoo
-                    $dataLimitGB = round($userData['data_limit'] / (1024 * 1024 * 1024), 2);
-                    $payload['data_limit'] = $dataLimitGB;
-                    $payload['data_limit_unit'] = 'GB';
+                    $dataLimitBytes = (int) $userData['data_limit'];
+                    $dataLimitResult = DurationNormalization::prepareEylandooDataLimit($dataLimitBytes);
+                    $payload['data_limit'] = $dataLimitResult['value'];
+                    $payload['data_limit_unit'] = $dataLimitResult['unit'];
+
+                    Log::info('Eylandoo update data limit conversion', [
+                        'input_bytes' => $dataLimitBytes,
+                        'output_value' => $dataLimitResult['value'],
+                        'output_unit' => $dataLimitResult['unit'],
+                        'username' => $username,
+                    ]);
                 }
             }
 

@@ -164,13 +164,24 @@ Create a new user.
 **⚠️ Important Notes:**
 - **`service_ids` MUST be an array.** If you don't want to specify services, use an empty array `[]`. Sending `null` will cause a 500 error on the remote panel.
 - For `fixed_date` strategy, you must provide either `expire_date` (ISO-8601 string) or `expire` (unix timestamp in seconds).
-- For `start_on_first_use` strategy, `usage_duration` (in seconds) is required.
+- For `start_on_first_use` strategy, `usage_duration` (in seconds) is required. **The value is internally converted to days using ceiling (round up) for panel compatibility.** Any partial day becomes a full day.
 - The `note` field is forwarded to the remote panel's note field.
 - `data_limit` is cast to integer internally.
 
+**Duration Conversion for start_on_first_use:**
+
+When using `expire_strategy: start_on_first_use`, the `usage_duration` value (in seconds) is converted to days before being sent to the panel:
+
+| Input (seconds) | Calculation | Output (days) |
+|-----------------|-------------|---------------|
+| 3600 (1 hour) | ceil(3600/86400) | 1 day |
+| 86400 (24 hours) | ceil(86400/86400) | 1 day |
+| 90000 (25 hours) | ceil(90000/86400) | 2 days |
+| 2592000 (30 days) | ceil(2592000/86400) | 30 days |
+
 **Expire Strategies:**
 - `fixed_date`: Expires on the specified `expire_date` or `expire` timestamp
-- `start_on_first_use`: Expires after `usage_duration` seconds from first connection
+- `start_on_first_use`: Expires after `usage_duration` days from first connection (input in seconds, converted to days internally)
 - `never`: Never expires (translated to 10 years for Eylandoo panels)
 
 #### PUT /api/users/{username}

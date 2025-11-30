@@ -82,6 +82,22 @@ Chosen because:
 
 ## API Integration
 
+### Data Limit Unit Handling
+
+The API automatically selects the appropriate unit (MB or GB) based on the data limit value:
+
+| Input (bytes) | Output Value | Output Unit |
+|---------------|--------------|-------------|
+| 52428800 (50 MB) | 50 | MB |
+| 524288000 (500 MB) | 500 | MB |
+| 1073741824 (1 GB) | 1.0 | GB |
+| 1610612736 (1.5 GB) | 1.5 | GB |
+
+**Rules:**
+- Values < 1 GB (1073741824 bytes): Sent as MB
+- Values >= 1 GB: Sent as GB with 2 decimal precision
+- Minimum: 1 MB for any positive value
+
 ### Create User Request
 ```json
 POST /api/v1/users
@@ -92,6 +108,19 @@ POST /api/v1/users
   "data_limit_unit": "GB",
   "expiry_date_str": "2025-12-07",
   "max_clients": 3
+}
+```
+
+**Example with MB (500 MB limit):**
+```json
+POST /api/v1/users
+{
+  "username": "resell_1_cfg_456",
+  "activation_type": "fixed_date",
+  "data_limit": 500,
+  "data_limit_unit": "MB",
+  "expiry_date_str": "2025-12-07",
+  "max_clients": 1
 }
 ```
 
