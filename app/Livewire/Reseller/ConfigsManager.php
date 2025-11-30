@@ -245,7 +245,15 @@ class ConfigsManager extends Component
 
         $panel = Panel::findOrFail($this->selectedPanelId);
         $trafficLimitBytes = (float) $this->trafficLimitGb * 1024 * 1024 * 1024;
-        $expiresAt = now()->addDays($this->expiresDays)->startOfDay();
+
+        // Cast expiresDays to int to prevent TypeError in Carbon::addDays()
+        // Livewire form inputs are strings even with 'integer' validation
+        $expiresDaysInt = (int) $this->expiresDays;
+        if ($expiresDaysInt < 1) {
+            session()->flash('error', 'Invalid expiry days value.');
+            return;
+        }
+        $expiresAt = now()->addDays($expiresDaysInt)->startOfDay();
         $nodeIds = array_map('intval', (array) $this->selectedNodeIds);
         $maxClients = (int) ($this->maxClients ?: 1);
 
@@ -330,7 +338,7 @@ class ConfigsManager extends Component
 
                 $plan = new Plan;
                 $plan->volume_gb = (float) $this->trafficLimitGb;
-                $plan->duration_days = $this->expiresDays;
+                $plan->duration_days = $expiresDaysInt;
                 $plan->marzneshin_service_ids = (array) $this->selectedServiceIds;
 
                 $result = $provisioner->provisionUser($panel, $plan, $username, [

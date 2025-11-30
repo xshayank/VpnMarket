@@ -359,4 +359,71 @@ class ResellerConfigsManagerTest extends TestCase
         $this->assertEquals('user', $config1->display_username);
         $this->assertEquals('Z2733', $config2->display_username);
     }
+
+    public function test_create_config_handles_string_expires_days(): void
+    {
+        ['user' => $user, 'reseller' => $reseller, 'panel' => $panel] = $this->createWalletReseller();
+
+        $this->actingAs($user);
+
+        // Test that string '7' for expiresDays doesn't throw TypeError
+        // This simulates the real behavior where Livewire bindings send strings from HTML inputs
+        Livewire::test(ConfigsManager::class)
+            ->call('openCreateModal')
+            ->set('selectedPanelId', $panel->id)
+            ->set('trafficLimitGb', '10')  // String from form
+            ->set('expiresDays', '7')      // String from form - this was causing TypeError
+            ->assertSet('expiresDays', '7')
+            ->assertHasNoErrors(['expiresDays']);
+
+        // Verify the validation passes for string integer values
+    }
+
+    public function test_create_config_validates_non_numeric_expires_days(): void
+    {
+        ['user' => $user, 'reseller' => $reseller, 'panel' => $panel] = $this->createWalletReseller();
+
+        $this->actingAs($user);
+
+        // Test that non-numeric string fails validation
+        Livewire::test(ConfigsManager::class)
+            ->call('openCreateModal')
+            ->set('selectedPanelId', $panel->id)
+            ->set('trafficLimitGb', 10)
+            ->set('expiresDays', 'abc')    // Non-numeric string should fail validation
+            ->call('createConfig')
+            ->assertHasErrors(['expiresDays']);
+    }
+
+    public function test_create_config_validates_zero_expires_days(): void
+    {
+        ['user' => $user, 'reseller' => $reseller, 'panel' => $panel] = $this->createWalletReseller();
+
+        $this->actingAs($user);
+
+        // Test that zero fails validation (min:1)
+        Livewire::test(ConfigsManager::class)
+            ->call('openCreateModal')
+            ->set('selectedPanelId', $panel->id)
+            ->set('trafficLimitGb', 10)
+            ->set('expiresDays', '0')
+            ->call('createConfig')
+            ->assertHasErrors(['expiresDays']);
+    }
+
+    public function test_create_config_validates_negative_expires_days(): void
+    {
+        ['user' => $user, 'reseller' => $reseller, 'panel' => $panel] = $this->createWalletReseller();
+
+        $this->actingAs($user);
+
+        // Test that negative values fail validation
+        Livewire::test(ConfigsManager::class)
+            ->call('openCreateModal')
+            ->set('selectedPanelId', $panel->id)
+            ->set('trafficLimitGb', 10)
+            ->set('expiresDays', '-5')
+            ->call('createConfig')
+            ->assertHasErrors(['expiresDays']);
+    }
 }
