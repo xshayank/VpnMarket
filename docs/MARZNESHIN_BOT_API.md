@@ -108,7 +108,7 @@ Create a new user.
 | `expire_strategy` | string | No | One of: `fixed_date` (default), `start_on_first_use`, `never` |
 | `expire_date` | string | If `expire_strategy` = `fixed_date` | Expiry date in ISO-8601 format (e.g., "2024-12-31T23:59:59Z") |
 | `expire` | integer | Alternative to `expire_date` | Unix timestamp (seconds) for expiry |
-| `usage_duration` | integer | If `expire_strategy` = `start_on_first_use` | Duration in seconds from first connection |
+| `usage_duration` | integer | If `expire_strategy` = `start_on_first_use` | Duration in **seconds** from first connection (see conversion table below) |
 | `service_ids` | array | No | **MUST be an array** (use `[]` if empty, **never** `null`) |
 | `data_limit_reset_strategy` | string | No | Reset strategy: `no_reset` (default), `day`, `week`, `month`, `year` |
 | `note` | string | No | User note (max 500 chars), forwarded to the panel |
@@ -138,7 +138,19 @@ Create a new user.
 }
 ```
 
-**Example: start_on_first_use Strategy**
+**Example: start_on_first_use Strategy (100 hours = 360000 seconds → 5 days)**
+```json
+{
+  "username": "newuser",
+  "data_limit": 5368709120,
+  "expire_strategy": "start_on_first_use",
+  "usage_duration": 360000,
+  "service_ids": [],
+  "note": "100 hours from first use (converts to 5 days)"
+}
+```
+
+**Example: start_on_first_use Strategy (30 days)**
 ```json
 {
   "username": "newuser",
@@ -164,25 +176,41 @@ Create a new user.
 **⚠️ Important Notes:**
 - **`service_ids` MUST be an array.** If you don't want to specify services, use an empty array `[]`. Sending `null` will cause a 500 error on the remote panel.
 - For `fixed_date` strategy, you must provide either `expire_date` (ISO-8601 string) or `expire` (unix timestamp in seconds).
-- For `start_on_first_use` strategy, `usage_duration` (in seconds) is required. **The value is internally converted to days using ceiling (round up) for panel compatibility.** Any partial day becomes a full day.
+- For `start_on_first_use` strategy, `usage_duration` (in **seconds**) is required. **The value is internally converted to days using ceiling (round up) for panel compatibility.** Any partial day becomes a full day.
 - The `note` field is forwarded to the remote panel's note field.
 - `data_limit` is cast to integer internally.
+- **Maximum duration:** 3650 days (~10 years). Values exceeding this are capped.
 
 **Duration Conversion for start_on_first_use:**
 
-When using `expire_strategy: start_on_first_use`, the `usage_duration` value (in seconds) is converted to days before being sent to the panel:
+When using `expire_strategy: start_on_first_use`, the `usage_duration` value (in **seconds**) is converted to days before being sent to the panel using the formula:
 
-| Input (seconds) | Calculation | Output (days) |
-|-----------------|-------------|---------------|
-| 3600 (1 hour) | ceil(3600/86400) | 1 day |
-| 86400 (24 hours) | ceil(86400/86400) | 1 day |
-| 90000 (25 hours) | ceil(90000/86400) | 2 days |
-| 2592000 (30 days) | ceil(2592000/86400) | 30 days |
+```
+days = ceil(seconds / 86400)
+```
+
+**Conversion Examples:**
+
+| Human-Readable | Input (seconds) | Calculation | Output (days) |
+|----------------|-----------------|-------------|---------------|
+| 1 hour | 3600 | ceil(3600/86400) = ceil(0.042) | 1 day |
+| 10 hours | 36000 | ceil(36000/86400) = ceil(0.417) | 1 day |
+| 24 hours | 86400 | ceil(86400/86400) = ceil(1.0) | 1 day |
+| 25 hours | 90000 | ceil(90000/86400) = ceil(1.042) | 2 days |
+| **100 hours** | **360000** | **ceil(360000/86400) = ceil(4.17)** | **5 days** |
+| 30 days | 2592000 | ceil(2592000/86400) = ceil(30.0) | 30 days |
+| 365 days | 31536000 | ceil(31536000/86400) = ceil(365.0) | 365 days |
+
+**How to Calculate Seconds:**
+- **Hours to seconds:** `hours × 3600`
+  - Example: 100 hours = 100 × 3600 = 360,000 seconds
+- **Days to seconds:** `days × 86400`
+  - Example: 30 days = 30 × 86400 = 2,592,000 seconds
 
 **Expire Strategies:**
-- `fixed_date`: Expires on the specified `expire_date` or `expire` timestamp
-- `start_on_first_use`: Expires after `usage_duration` days from first connection (input in seconds, converted to days internally)
-- `never`: Never expires (translated to 10 years for Eylandoo panels)
+- `fixed_date`: Expires on the specified `expire_date` or `expire` timestamp. The date is NOT converted - it's used as-is.
+- `start_on_first_use`: Expires after `usage_duration` from first connection. **Input must be in seconds**, which is internally converted to days using ceiling.
+- `never`: Never expires (translated to 10 years/3650 days for panel compatibility)
 
 #### PUT /api/users/{username}
 Update user settings.

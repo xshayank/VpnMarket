@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Helpers\ExpiryNormalizer;
 use App\Http\Controllers\Controller;
 use App\Models\ApiAuditLog;
 use App\Models\ApiKey;
@@ -552,29 +553,44 @@ class MarzneshinStyleController extends Controller
             ]);
         }
 
-        // Calculate expiry based on expire_strategy
-        // Special handling for Eylandoo panels: "never" expiry is not implemented in the panel.
-        // For expire_strategy "never", we translate to a long fixed_date.
+        // Use ExpiryNormalizer for unified expiry handling
+        $expiryNormalizer = new ExpiryNormalizer();
+        $normalizedExpiry = $expiryNormalizer->normalize($expireStrategy, [
+            'usage_duration' => $usageDuration,
+            'expire_date' => $request->input('expire_date'),
+            'expire' => $request->input('expire'),
+        ]);
+
+        // Log expiry normalization for traceability
+        Log::info('MarzneshinStyleController: Expiry normalized', [
+            'expire_strategy' => $expireStrategy,
+            'original_usage_duration_seconds' => $normalizedExpiry['original_usage_duration_seconds'],
+            'normalized_usage_days' => $normalizedExpiry['normalized_usage_days'],
+            'final_payload_usage_duration_seconds' => $normalizedExpiry['final_payload_usage_duration_seconds'],
+            'warnings' => $normalizedExpiry['warnings'],
+        ]);
+
+        // Calculate expiresAt based on normalized result
         $expiresAt = null;
         if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
-            // For start_on_first_use, use usage_duration (in seconds) from first use
-            // For now, set a far future date and store the strategy in meta
-            $expiresAt = $this->getNeverExpiryDate();
+            // For start_on_first_use, set expiry based on normalized days from now
+            // This serves as a placeholder - actual activation happens on first use
+            $expiresAt = now()->addDays($normalizedExpiry['normalized_usage_days']);
         } elseif ($expireStrategy === 'never') {
             // Eylandoo panels do not support "never" expiry natively.
             // Translate to a long fixed_date (default: 10 years).
             $expiresAt = $this->getNeverExpiryDate();
-        } elseif ($request->has('expire_date')) {
-            $expiresAt = \Carbon\Carbon::parse($request->input('expire_date'));
-        } elseif ($request->has('expire')) {
-            // Handle unix timestamp for expire field
-            $expiresAt = \Carbon\Carbon::createFromTimestamp((int) $request->input('expire'));
+        } elseif ($normalizedExpiry['fixed_date']) {
+            $expiresAt = $normalizedExpiry['fixed_date'];
         } else {
             // Default to 30 days if no expire_date provided
             $expiresAt = now()->addDays(30);
         }
 
-        $expiresDays = now()->diffInDays($expiresAt);
+        // For start_on_first_use, use the normalized days; otherwise calculate from expiresAt
+        $expiresDays = ($expireStrategy === 'start_on_first_use' && $normalizedExpiry['normalized_usage_days'])
+            ? $normalizedExpiry['normalized_usage_days']
+            : (int) now()->diffInDays($expiresAt);
 
         // Handle service_ids -> node_ids mapping for Eylandoo
         // $serviceIds is already normalized from $input['service_ids'] above
@@ -622,7 +638,7 @@ class MarzneshinStyleController extends Controller
         $config = null;
 
         try {
-            DB::transaction(function () use ($request, $reseller, $user, $panel, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $serviceIds, $panelUsername, $usernamePrefix, $requestedUsername, $apiKey, $expireStrategy, $usageDuration, &$result, &$config) {
+            DB::transaction(function () use ($request, $reseller, $user, $panel, $trafficLimitBytes, $expiresAt, $expiresDays, $nodeIds, $serviceIds, $panelUsername, $usernamePrefix, $requestedUsername, $apiKey, $expireStrategy, $usageDuration, $normalizedExpiry, &$result, &$config) {
                 $provisioner = new ResellerProvisioner;
 
                 // Build meta with additional fields
@@ -642,6 +658,7 @@ class MarzneshinStyleController extends Controller
                 // Store usage_duration for start_on_first_use strategy
                 if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
                     $meta['usage_duration'] = $usageDuration;
+                    $meta['normalized_usage_days'] = $normalizedExpiry['normalized_usage_days'];
                     $meta['activation_pending'] = true;
                 }
 
@@ -677,14 +694,24 @@ class MarzneshinStyleController extends Controller
                 $plan->duration_days = $expiresDays;
                 $plan->marzneshin_service_ids = $serviceIds;
 
-                $provisionResult = $provisioner->provisionUser($panel, $plan, $panelUsername, [
+                // Build provisioning options with expire strategy support
+                $provisionOptions = [
                     'traffic_limit_bytes' => $trafficLimitBytes,
                     'expires_at' => $expiresAt,
                     'service_ids' => $serviceIds,
                     'connections' => 1,
                     'max_clients' => 1,
                     'nodes' => $nodeIds,
-                ]);
+                    'expire_strategy' => $expireStrategy,
+                ];
+
+                // Pass usage_duration for start_on_first_use strategy
+                if ($expireStrategy === 'start_on_first_use' && $usageDuration > 0) {
+                    $provisionOptions['usage_duration'] = $usageDuration;
+                    $provisionOptions['normalized_usage_days'] = $normalizedExpiry['normalized_usage_days'];
+                }
+
+                $provisionResult = $provisioner->provisionUser($panel, $plan, $panelUsername, $provisionOptions);
 
                 if ($provisionResult) {
                     $config->update([

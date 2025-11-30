@@ -327,10 +327,35 @@ class ResellerProvisioner
         // Prepare user data array for MarzneshinService::createUser()
         $userData = [
             'username' => $username,
-            'expire' => $expiresAt->getTimestamp(),
             'data_limit' => $trafficLimit,
             'service_ids' => (array) $serviceIds,
         ];
+
+        // Handle expire strategy - pass to MarzneshinService for proper handling
+        $expireStrategy = $options['expire_strategy'] ?? 'fixed_date';
+        $userData['expire_strategy'] = $expireStrategy;
+
+        if ($expireStrategy === 'start_on_first_use') {
+            // Pass usage_duration in seconds for MarzneshinService to convert to days
+            $usageDuration = $options['usage_duration'] ?? 0;
+            if ($usageDuration > 0) {
+                $userData['usage_duration'] = $usageDuration;
+
+                Log::info('ResellerProvisioner: Provisioning Marzneshin user with start_on_first_use', [
+                    'username' => $username,
+                    'usage_duration_seconds' => $usageDuration,
+                    'normalized_usage_days' => $options['normalized_usage_days'] ?? null,
+                ]);
+            }
+        } elseif ($expireStrategy === 'never') {
+            // MarzneshinService handles "never" strategy
+            Log::info('ResellerProvisioner: Provisioning Marzneshin user with never expiry', [
+                'username' => $username,
+            ]);
+        } else {
+            // fixed_date strategy - use expire timestamp
+            $userData['expire'] = $expiresAt->getTimestamp();
+        }
 
         $result = $service->createUser($userData);
 
