@@ -161,8 +161,9 @@ test('expiresDaysInt is properly passed to transaction closure', function () {
     $source = file($filename);
     $methodSource = implode('', array_slice($source, $startLine - 1, $length + 1));
 
-    // Verify that expiresDaysInt is in the use() clause of DB::transaction
-    expect($methodSource)->toContain('use ($reseller, $panel, $trafficLimitBytes, $expiresAt, $nodeIds, $maxClients, $expiresDaysInt)');
+    // Verify that expiresDaysInt is in a use() clause (checking only for the presence of expiresDaysInt)
+    // This is less fragile than checking the exact parameter list
+    expect($methodSource)->toMatch('/use\s*\([^)]*\$expiresDaysInt[^)]*\)/');
 });
 
 test('is_numeric guard prevents non-numeric expiresDays from reaching Carbon', function () {
