@@ -72,21 +72,47 @@ Both Create and Edit modals feature:
 
 ### 4. Username Display Rule
 
-**Important**: The UI always shows the sanitized prefix (from `username_prefix` column or extracted from `external_username`), NOT the full `panel_username` that's stored in the VPN panel.
+**Important**: The UI always shows a sensible username prefix for ALL configs (both API-created and panel-created), NOT the full `panel_username` that's stored in the VPN panel.
 
-This is achieved through the `getDisplayUsernameAttribute()` accessor in the `ResellerConfig` model:
+#### Create User Modal: Username Field
+
+The Create User modal includes a **Username** field as the first input:
+- **Field name**: نام کاربری (Username)
+- **Position**: First input in the form
+- **Validation**: 2-32 alphanumeric characters only (no special characters)
+- **Purpose**: Sets the display username shown to end users
+- **Behavior**: The entered prefix is sanitized and used to generate a unique `panel_username` internally
+
+#### Display Prefix Extraction
+
+The `getDisplayUsernameAttribute()` accessor in the `ResellerConfig` model handles display for all configs:
 
 ```php
 public function getDisplayUsernameAttribute(): string
 {
-    // Priority: username_prefix > extracted from external_username > external_username
+    // Priority 1: username_prefix if explicitly set (API-created configs)
     if ($this->username_prefix !== null && $this->username_prefix !== '') {
         return $this->username_prefix;
     }
-    // Fallback: extract prefix from external_username
+
+    // Priority 2: Extract display prefix from panel_username (panel-created configs)
+    // Uses robust heuristics via UsernameGenerator::extractDisplayPrefix()
     // ...
 }
 ```
+
+#### Prefix Extraction Examples
+
+For configs where `username_prefix` is not stored (legacy/manual/panel-created), the system extracts a display prefix:
+
+| Panel Username | Extracted Display Prefix |
+|----------------|-------------------------|
+| `ali_MN(EL)_5k2h9` | `ali` |
+| `user_4_order_84` | `user` |
+| `Z2733` | `Z2733` |
+| `testuser_abc123` | `testuser` |
+
+This extraction happens on the fly via the accessor without modifying stored data.
 
 ### 5. Search and Filters
 

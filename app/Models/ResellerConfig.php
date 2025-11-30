@@ -137,23 +137,30 @@ class ResellerConfig extends Model
      * Get the display username (the original prefix requested by user)
      * This is what should be shown to end users, not the full panel username
      *
+     * For configs created via API, the username_prefix is stored and returned directly.
+     * For panel-created configs (legacy/manual), a display prefix is extracted on the fly
+     * using robust heuristics to derive a sensible display name.
+     *
      * @return string
      */
     public function getDisplayUsernameAttribute(): string
     {
-        // Priority: username_prefix > extracted from external_username > external_username
+        // Priority 1: username_prefix if explicitly set
         if ($this->username_prefix !== null && $this->username_prefix !== '') {
             return $this->username_prefix;
         }
 
-        // Fallback: extract prefix from external_username if available
+        // Priority 2: Extract display prefix from panel_username if available
+        $panelUsername = $this->attributes['panel_username'] ?? null;
+        if ($panelUsername !== null && $panelUsername !== '') {
+            $generator = new \App\Services\UsernameGenerator();
+            return $generator->extractDisplayPrefix($panelUsername);
+        }
+
+        // Priority 3: Extract display prefix from external_username if available
         if ($this->external_username !== null && $this->external_username !== '') {
-            // Extract everything before the last underscore
-            $lastUnderscorePos = strrpos($this->external_username, '_');
-            if ($lastUnderscorePos !== false) {
-                return substr($this->external_username, 0, $lastUnderscorePos);
-            }
-            return $this->external_username;
+            $generator = new \App\Services\UsernameGenerator();
+            return $generator->extractDisplayPrefix($this->external_username);
         }
 
         return '';

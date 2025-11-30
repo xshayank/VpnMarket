@@ -202,4 +202,91 @@ class UsernameGeneratorTest extends TestCase
         // Default suffix length is 6
         $this->assertEquals(6, strlen($suffix));
     }
+
+    /**
+     * Test extractDisplayPrefix extracts first meaningful token from panel-created usernames
+     */
+    public function test_extract_display_prefix_from_standard_format(): void
+    {
+        // Standard format: "ali_abc123" -> "ali"
+        $this->assertEquals('ali', $this->generator->extractDisplayPrefix('ali_abc123'));
+        $this->assertEquals('user', $this->generator->extractDisplayPrefix('user_123456'));
+        $this->assertEquals('testuser', $this->generator->extractDisplayPrefix('testuser_xyz789'));
+    }
+
+    /**
+     * Test extractDisplayPrefix handles legacy format usernames
+     */
+    public function test_extract_display_prefix_from_legacy_format(): void
+    {
+        // Legacy format: "user_123_cfg_456" -> "user"
+        $this->assertEquals('user', $this->generator->extractDisplayPrefix('user_123_cfg_456'));
+        $this->assertEquals('resell', $this->generator->extractDisplayPrefix('resell_1_order_84_2'));
+    }
+
+    /**
+     * Test extractDisplayPrefix handles panel-created names with special patterns
+     */
+    public function test_extract_display_prefix_from_panel_created(): void
+    {
+        // Panel-created: "ali_MN(EL)_5k2h9" -> "ali"
+        $this->assertEquals('ali', $this->generator->extractDisplayPrefix('ali_MN(EL)_5k2h9'));
+        
+        // Order format: "user_4_order_84" -> "user"
+        $this->assertEquals('user', $this->generator->extractDisplayPrefix('user_4_order_84'));
+    }
+
+    /**
+     * Test extractDisplayPrefix handles simple numeric usernames
+     */
+    public function test_extract_display_prefix_from_numeric(): void
+    {
+        // Simple numeric: "Z2733" -> "Z2733"
+        $this->assertEquals('Z2733', $this->generator->extractDisplayPrefix('Z2733'));
+        
+        // Alphanumeric without separator
+        $this->assertEquals('ABC123', $this->generator->extractDisplayPrefix('ABC123'));
+    }
+
+    /**
+     * Test extractDisplayPrefix handles empty and edge cases
+     */
+    public function test_extract_display_prefix_edge_cases(): void
+    {
+        // Empty string
+        $this->assertEquals('', $this->generator->extractDisplayPrefix(''));
+        
+        // Only separators
+        $this->assertEquals('', $this->generator->extractDisplayPrefix('___'));
+        
+        // Only special characters
+        $this->assertEquals('', $this->generator->extractDisplayPrefix('@#$%'));
+        
+        // Leading/trailing whitespace
+        $this->assertEquals('test', $this->generator->extractDisplayPrefix('  test_123  '));
+    }
+
+    /**
+     * Test extractDisplayPrefix respects max length
+     */
+    public function test_extract_display_prefix_max_length(): void
+    {
+        // Very long prefix should be truncated
+        $longName = 'verylongusername_abc123';
+        $result = $this->generator->extractDisplayPrefix($longName, 8);
+        $this->assertLessThanOrEqual(8, strlen($result));
+        $this->assertEquals('verylong', $result);
+    }
+
+    /**
+     * Test extractDisplayPrefix handles dash separators
+     */
+    public function test_extract_display_prefix_with_dashes(): void
+    {
+        // Dash-separated: "user-123-test" -> "user"
+        $this->assertEquals('user', $this->generator->extractDisplayPrefix('user-123-test'));
+        
+        // Mixed separators: "user_123-test" -> "user"
+        $this->assertEquals('user', $this->generator->extractDisplayPrefix('user_123-test'));
+    }
 }
