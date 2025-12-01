@@ -80,7 +80,7 @@ class EylandooService
 
                 return [
                     'success' => false,
-                    'error' => 'نام کاربری الزامی است.',
+                    'error' => __('eylandoo.username_required'),
                     'correlation_id' => $correlationId,
                 ];
             }
@@ -191,7 +191,7 @@ class EylandooService
 
             return [
                 'success' => false,
-                'error' => 'اتصال به پنل برقرار نشد. لطفاً بعداً تلاش کنید.',
+                'error' => __('eylandoo.connection_failed'),
                 'correlation_id' => $correlationId,
             ];
         } catch (\Exception $e) {
@@ -203,7 +203,7 @@ class EylandooService
 
             return [
                 'success' => false,
-                'error' => 'خطای غیرمنتظره: '.$e->getMessage(),
+                'error' => __('eylandoo.unexpected_error', ['message' => $e->getMessage()]),
                 'correlation_id' => $correlationId,
             ];
         }
@@ -234,17 +234,17 @@ class EylandooService
             }
         }
 
-        // Default messages based on status code
+        // Default messages based on status code using language files
         return match ($statusCode) {
-            400 => 'درخواست نامعتبر است.',
-            401 => 'دسترسی غیرمجاز. کلید API نامعتبر است.',
-            403 => 'عدم دسترسی. شما مجوز این عملیات را ندارید.',
-            404 => 'منبع یافت نشد.',
-            409 => 'نام کاربری قبلاً استفاده شده است.',
-            422 => 'اطلاعات ورودی نامعتبر است.',
-            429 => 'تعداد درخواست‌ها بیش از حد مجاز است.',
-            500, 502, 503, 504 => 'خطای سرور پنل. لطفاً بعداً تلاش کنید.',
-            default => "خطای پنل (کد {$statusCode})",
+            400 => __('eylandoo.http_400'),
+            401 => __('eylandoo.http_401'),
+            403 => __('eylandoo.http_403'),
+            404 => __('eylandoo.http_404'),
+            409 => __('eylandoo.http_409'),
+            422 => __('eylandoo.http_422'),
+            429 => __('eylandoo.http_429'),
+            500, 502, 503, 504 => __('eylandoo.http_5xx'),
+            default => __('eylandoo.http_default', ['code' => $statusCode]),
         };
     }
 

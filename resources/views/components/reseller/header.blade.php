@@ -4,29 +4,7 @@
     use Illuminate\Support\Facades\Storage;
     use App\Models\Setting;
     use Illuminate\Support\Facades\Cache;
-    use Illuminate\Support\Facades\Route;
-
-    // Defensive helper to safely generate route URLs
-    $safeRoute = function(string $name, array $params = []): ?string {
-        try {
-            if (Route::has($name)) {
-                return route($name, $params);
-            }
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::debug('Route not available: ' . $name, ['error' => $e->getMessage()]);
-        }
-        return null;
-    };
-
-    // Check if a module is enabled safely
-    $moduleEnabled = function(string $moduleName): bool {
-        try {
-            return class_exists('\Nwidart\Modules\Facades\Module') 
-                && \Nwidart\Modules\Facades\Module::isEnabled($moduleName);
-        } catch (\Exception $e) {
-            return false;
-        }
-    };
+    use App\Helpers\RouteHelper;
 
     // Only fetch site_logo setting, with caching for performance
     $logoPath = null;
@@ -40,13 +18,13 @@
     
     $reseller = auth()->user()->reseller ?? null;
     
-    // Pre-compute safe route URLs
-    $dashboardUrl = $safeRoute('reseller.dashboard');
-    $walletChargeUrl = $safeRoute('wallet.charge.form');
-    $ticketsUrl = $moduleEnabled('Ticketing') ? $safeRoute('reseller.tickets.index') : null;
-    $apiKeysUrl = ($reseller?->api_enabled ?? false) ? $safeRoute('reseller.api-keys.index') : null;
-    $profileUrl = $safeRoute('profile.edit');
-    $logoutUrl = $safeRoute('logout');
+    // Pre-compute safe route URLs using helper class
+    $dashboardUrl = RouteHelper::safeRoute('reseller.dashboard');
+    $walletChargeUrl = RouteHelper::safeRoute('wallet.charge.form');
+    $ticketsUrl = RouteHelper::moduleEnabled('Ticketing') ? RouteHelper::safeRoute('reseller.tickets.index') : null;
+    $apiKeysUrl = ($reseller?->api_enabled ?? false) ? RouteHelper::safeRoute('reseller.api-keys.index') : null;
+    $profileUrl = RouteHelper::safeRoute('profile.edit');
+    $logoutUrl = RouteHelper::safeRoute('logout');
     
     // Derive page title from route if not provided
     if (!$title) {
