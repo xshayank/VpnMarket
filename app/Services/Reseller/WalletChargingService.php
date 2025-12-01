@@ -114,7 +114,9 @@ class WalletChargingService
         $deltaGB = $deltaBytes / (1024 * 1024 * 1024);
         $pricePerGB = $reseller->getWalletPricePerGb();
 
-        // Calculate cost in تومان (use ceiling to avoid undercharging)
+        // Calculate cost in Toman currency
+        // Uses ceiling to avoid undercharging on fractional GB usage
+        // Example: 0.1 GB at 1000 per GB = 100, but 0.01 GB at 1000 = 10 (ceiling ensures minimum charge)
         $cost = (int) ceil($deltaGB * $pricePerGB);
 
         Log::info('wallet_charge_calculation', [
@@ -243,6 +245,30 @@ class WalletChargingService
     }
 
     /**
+     * Resolve the cycle marker for tracking charge operations.
+     * Priority: snapshot meta > provided cycleStartedAt > current timestamp
+     *
+     * @param  ResellerUsageSnapshot|null  $snapshot
+     * @param  string|null  $cycleStartedAt
+     * @return string
+     */
+    protected function resolveCycleMarker(?ResellerUsageSnapshot $snapshot, ?string $cycleStartedAt = null): string
+    {
+        // Try to get from snapshot meta first
+        if ($snapshot && isset($snapshot->meta['cycle_started_at'])) {
+            return $snapshot->meta['cycle_started_at'];
+        }
+
+        // Fall back to provided cycle started at
+        if ($cycleStartedAt) {
+            return $cycleStartedAt;
+        }
+
+        // Last resort: use current time
+        return now()->startOfMinute()->toIso8601String();
+    }
+
+    /**
      * Evaluate whether a wallet reseller should be suspended based on balance.
      */
     protected function evaluateSuspension(Reseller $reseller, string $cycleStartedAt, ?ResellerUsageSnapshot $snapshot = null, ?int $balanceOverride = null): bool
@@ -271,7 +297,7 @@ class WalletChargingService
      */
     protected function suspendWalletReseller(Reseller $reseller, string $cycleStartedAt, ?ResellerUsageSnapshot $snapshot = null): void
     {
-        $cycleMarker = $snapshot->meta['cycle_started_at'] ?? $cycleStartedAt ?? now()->startOfMinute()->toIso8601String();
+        $cycleMarker = $this->resolveCycleMarker($snapshot, $cycleStartedAt);
 
         DB::transaction(function () use ($reseller, $cycleMarker) {
             $reseller->update(['status' => 'suspended_wallet']);
