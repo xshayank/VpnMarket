@@ -137,4 +137,3 @@ test('reseller header theme toggle persists to cookie', function () {
     $view->assertSee('document.cookie', false);
 });
 
-
