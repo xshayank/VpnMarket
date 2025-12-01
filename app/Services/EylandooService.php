@@ -34,14 +34,57 @@ class EylandooService
     }
 
     /**
+     * Check panel health/status before performing operations
+     *
+     * @return array ['online' => bool, 'message' => ?string]
+     */
+    public function checkHealth(): array
+    {
+        try {
+            $response = $this->client()
+                ->timeout(5)
+                ->get($this->baseUrl.'/api/v1/status');
+
+            if ($response->successful()) {
+                return ['online' => true, 'message' => null];
+            }
+
+            return [
+                'online' => false,
+                'message' => 'Panel returned status code: '.$response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'online' => false,
+                'message' => 'Cannot connect to panel: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Create a new user
      *
      * @param  array  $userData  User data with keys: username, data_limit, expire, max_clients (connections), nodes
-     * @return array|null Response from API or null on failure
+     * @return array Response with 'success' => bool, 'data' => ?array, 'error' => ?string
      */
     public function createUser(array $userData): ?array
     {
+        $correlationId = uniqid('eylandoo_create_', true);
+
         try {
+            // Input validation
+            if (empty($userData['username'])) {
+                Log::warning('Eylandoo Create User: Missing username', [
+                    'correlation_id' => $correlationId,
+                ]);
+
+                return [
+                    'success' => false,
+                    'error' => 'نام کاربری الزامی است.',
+                    'correlation_id' => $correlationId,
+                ];
+            }
+
             $payload = [
                 'username' => $userData['username'],
                 'activation_type' => 'fixed_date',
@@ -61,6 +104,7 @@ class EylandooService
                 $payload['data_limit_unit'] = $dataLimitResult['unit'];
 
                 Log::info('Eylandoo data limit conversion', [
+                    'correlation_id' => $correlationId,
                     'input_bytes' => $dataLimitBytes,
                     'output_value' => $dataLimitResult['value'],
                     'output_unit' => $dataLimitResult['unit'],
@@ -94,20 +138,114 @@ class EylandooService
                 }
             }
 
-            $response = $this->client()->post($this->baseUrl.'/api/v1/users', $payload);
+            Log::info('Eylandoo Create User: Sending request', [
+                'correlation_id' => $correlationId,
+                'username' => $userData['username'],
+                'payload_keys' => array_keys($payload),
+            ]);
 
-            Log::info('Eylandoo Create User Response:', $response->json() ?? ['raw' => $response->body()]);
+            $response = $this->client()
+                ->timeout(30)
+                ->post($this->baseUrl.'/api/v1/users', $payload);
+
+            $responseData = $response->json();
+
+            Log::info('Eylandoo Create User Response', [
+                'correlation_id' => $correlationId,
+                'status_code' => $response->status(),
+                'response' => $responseData ?? ['raw' => substr($response->body(), 0, 500)],
+            ]);
 
             if ($response->successful()) {
-                return $response->json();
+                // Return response with success flag for backward compatibility
+                if (is_array($responseData)) {
+                    $responseData['success'] = true;
+                    $responseData['correlation_id'] = $correlationId;
+                }
+
+                return $responseData;
             }
 
-            return null;
-        } catch (\Exception $e) {
-            Log::error('Eylandoo Create User Exception:', ['message' => $e->getMessage()]);
+            // Extract error message from panel response
+            $errorMessage = $this->extractErrorMessage($responseData, $response->status());
 
-            return null;
+            Log::warning('Eylandoo Create User Failed', [
+                'correlation_id' => $correlationId,
+                'status_code' => $response->status(),
+                'error_message' => $errorMessage,
+                'username' => $userData['username'],
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $errorMessage,
+                'status_code' => $response->status(),
+                'correlation_id' => $correlationId,
+            ];
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('Eylandoo Create User Connection Error', [
+                'correlation_id' => $correlationId,
+                'message' => $e->getMessage(),
+                'username' => $userData['username'] ?? 'unknown',
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'اتصال به پنل برقرار نشد. لطفاً بعداً تلاش کنید.',
+                'correlation_id' => $correlationId,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Eylandoo Create User Exception', [
+                'correlation_id' => $correlationId,
+                'message' => $e->getMessage(),
+                'username' => $userData['username'] ?? 'unknown',
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'خطای غیرمنتظره: '.$e->getMessage(),
+                'correlation_id' => $correlationId,
+            ];
         }
+    }
+
+    /**
+     * Extract user-friendly error message from API response
+     */
+    protected function extractErrorMessage(?array $responseData, int $statusCode): string
+    {
+        if ($responseData) {
+            // Try common error message fields
+            foreach (['message', 'error', 'detail', 'msg', 'reason'] as $field) {
+                if (isset($responseData[$field]) && is_string($responseData[$field])) {
+                    return $responseData[$field];
+                }
+            }
+
+            // Try nested error structures
+            if (isset($responseData['errors']) && is_array($responseData['errors'])) {
+                $firstError = reset($responseData['errors']);
+                if (is_string($firstError)) {
+                    return $firstError;
+                }
+                if (is_array($firstError) && isset($firstError[0])) {
+                    return $firstError[0];
+                }
+            }
+        }
+
+        // Default messages based on status code
+        return match ($statusCode) {
+            400 => 'درخواست نامعتبر است.',
+            401 => 'دسترسی غیرمجاز. کلید API نامعتبر است.',
+            403 => 'عدم دسترسی. شما مجوز این عملیات را ندارید.',
+            404 => 'منبع یافت نشد.',
+            409 => 'نام کاربری قبلاً استفاده شده است.',
+            422 => 'اطلاعات ورودی نامعتبر است.',
+            429 => 'تعداد درخواست‌ها بیش از حد مجاز است.',
+            500, 502, 503, 504 => 'خطای سرور پنل. لطفاً بعداً تلاش کنید.',
+            default => "خطای پنل (کد {$statusCode})",
+        };
     }
 
     /**
