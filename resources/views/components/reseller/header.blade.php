@@ -3,9 +3,12 @@
 @php
     use Illuminate\Support\Facades\Storage;
     use App\Models\Setting;
+    use Illuminate\Support\Facades\Cache;
 
-    $settings = Setting::all()->pluck('value', 'key');
-    $logoPath = $settings->get('site_logo');
+    // Only fetch site_logo setting, with caching for performance
+    $logoPath = Cache::remember('site_logo', 3600, function () {
+        return Setting::where('key', 'site_logo')->value('value');
+    });
     $reseller = auth()->user()->reseller ?? null;
     
     // Derive page title from route if not provided
