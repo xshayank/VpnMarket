@@ -1818,3 +1818,170 @@ test('updateUser disables Cisco when enable_cisco is false', function () {
             && ! isset($body['cisco_password']);
     });
 });
+
+test('createUser returns error response when API returns non-2xx', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([
+            'message' => 'Username already exists',
+            'error' => 'duplicate_username',
+        ], 409),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->createUser(['username' => 'testuser']);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeFalse()
+        ->and($result['error'])->toBe('Username already exists')
+        ->and($result['status_code'])->toBe(409)
+        ->and($result)->toHaveKey('correlation_id');
+});
+
+test('createUser surfaces panel error message from response', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([
+            'detail' => 'Data limit exceeds maximum allowed',
+        ], 422),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->createUser(['username' => 'testuser', 'data_limit' => 100000000000000]);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeFalse()
+        ->and($result['error'])->toBe('Data limit exceeds maximum allowed');
+});
+
+test('createUser returns validation error for missing username', function () {
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->createUser([]);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeFalse()
+        ->and($result['error'])->toContain('نام کاربری');
+});
+
+test('createUser handles 5xx errors with appropriate message', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([], 500),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->createUser(['username' => 'testuser']);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeFalse()
+        ->and($result['error'])->toContain('خطای سرور');
+});
+
+test('createUser uses panel error message when available on 5xx', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response(['error' => 'Database connection failed'], 500),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->createUser(['username' => 'testuser']);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeFalse()
+        ->and($result['error'])->toBe('Database connection failed');
+});
+
+test('createUser includes success flag on successful creation', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([
+            'status' => 'success',
+            'data' => ['username' => 'testuser'],
+        ], 201),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->createUser(['username' => 'testuser']);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeTrue()
+        ->and($result)->toHaveKey('correlation_id');
+});
+
+test('checkHealth returns online true when panel responds', function () {
+    Http::fake([
+        '*/api/v1/status' => Http::response(['status' => 'ok'], 200),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->checkHealth();
+
+    expect($result['online'])->toBeTrue()
+        ->and($result['message'])->toBeNull();
+});
+
+test('checkHealth returns offline with message when panel returns error', function () {
+    Http::fake([
+        '*/api/v1/status' => Http::response(['error' => 'maintenance'], 503),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->checkHealth();
+
+    expect($result['online'])->toBeFalse()
+        ->and($result['message'])->toContain('503');
+});
+
+test('checkHealth returns offline with message on connection error', function () {
+    Http::fake([
+        '*/api/v1/status' => function () {
+            throw new \Illuminate\Http\Client\ConnectionException('Connection refused');
+        },
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $result = $service->checkHealth();
+
+    expect($result['online'])->toBeFalse()
+        ->and($result['message'])->toContain('Cannot connect');
+});
