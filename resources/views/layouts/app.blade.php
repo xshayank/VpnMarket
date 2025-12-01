@@ -9,6 +9,9 @@
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
+        {{-- Theme initialization script - must run before CSS to prevent FOUC --}}
+        <x-theme-scripts />
+
         <!-- Livewire Styles -->
         @livewireStyles
 
