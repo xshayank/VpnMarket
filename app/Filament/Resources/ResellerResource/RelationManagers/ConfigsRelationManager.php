@@ -7,6 +7,7 @@ use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
 use App\Services\MarzbanService;
 use App\Services\MarzneshinService;
+use App\Services\Reseller\WalletChargingService;
 use App\Services\XUIService;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -14,6 +15,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ConfigsRelationManager extends RelationManager
@@ -170,21 +172,7 @@ class ConfigsRelationManager extends RelationManager
                     ->color('info')
                     ->requiresConfirmation()
                     ->action(function (ResellerConfig $record) {
-                        $record->update(['usage_bytes' => 0]);
-
-                        ResellerConfigEvent::create([
-                            'reseller_config_id' => $record->id,
-                            'type' => 'usage_reset',
-                            'meta' => [
-                                'previous_usage' => $record->usage_bytes,
-                                'reset_at' => now()->toDateTimeString(),
-                            ],
-                        ]);
-
-                        Notification::make()
-                            ->success()
-                            ->title('مصرف با موفقیت ریست شد')
-                            ->send();
+                        $this->resetConfigUsage($record);
                     }),
 
                 Tables\Actions\Action::make('extend_time')
@@ -441,44 +429,129 @@ class ConfigsRelationManager extends RelationManager
         }
     }
 
+    protected function resetConfigUsage(ResellerConfig $config): void
+    {
+        try {
+            DB::transaction(function () use ($config) {
+                $oldUsageBytes = $config->usage_bytes;
+                $oldSettledBytes = (int) data_get($config->meta, 'settled_usage_bytes', 0);
+
+                // Perform final settlement BEFORE reset for wallet-based resellers
+                $settlementResult = ['status' => 'skipped', 'cost' => 0, 'charged_bytes' => 0];
+                $reseller = $config->reseller;
+                if ($reseller && $reseller->type === 'wallet') {
+                    $chargingService = app(WalletChargingService::class);
+                    $settlementResult = $chargingService->finalSettlementForConfig($config, 'reset_traffic');
+                }
+
+                // Reset usage and update meta
+                $meta = $config->meta ?? [];
+                $meta['settled_usage_bytes'] = $oldSettledBytes + $oldUsageBytes;
+                $meta['last_reset_at'] = now()->toIso8601String();
+
+                $config->update([
+                    'usage_bytes' => 0,
+                    'meta' => $meta,
+                ]);
+
+                ResellerConfigEvent::create([
+                    'reseller_config_id' => $config->id,
+                    'type' => 'usage_reset',
+                    'meta' => [
+                        'previous_usage' => $oldUsageBytes,
+                        'previous_settled_bytes' => $oldSettledBytes,
+                        'new_settled_bytes' => $oldSettledBytes + $oldUsageBytes,
+                        'settlement_status' => $settlementResult['status'],
+                        'settlement_cost' => $settlementResult['cost'],
+                        'settlement_charged_bytes' => $settlementResult['charged_bytes'],
+                        'reset_at' => now()->toDateTimeString(),
+                        'admin_action' => true,
+                    ],
+                ]);
+
+                // Create audit log entry
+                AuditLog::log(
+                    action: 'config_usage_reset',
+                    targetType: 'config',
+                    targetId: $config->id,
+                    reason: 'admin_action',
+                    meta: [
+                        'previous_usage' => $oldUsageBytes,
+                        'settlement_status' => $settlementResult['status'],
+                        'settlement_cost' => $settlementResult['cost'],
+                    ]
+                );
+            });
+
+            Notification::make()
+                ->success()
+                ->title('مصرف با موفقیت ریست شد')
+                ->send();
+        } catch (\Exception $e) {
+            Log::error('Error resetting config usage: '.$e->getMessage(), ['config_id' => $config->id]);
+            Notification::make()
+                ->danger()
+                ->title('خطا در ریست مصرف')
+                ->body($e->getMessage())
+                ->send();
+        }
+    }
+
     protected function deleteConfig(ResellerConfig $config): void
     {
         try {
-            if ($config->panel && $config->panel_user_id) {
-                $credentials = $config->panel->getCredentials();
-                $provisioner = new \Modules\Reseller\Services\ResellerProvisioner;
-
-                $success = $provisioner->deleteUser(
-                    $config->panel_type,
-                    $credentials,
-                    $config->panel_user_id
-                );
-
-                if (! $success) {
-                    Log::warning('Failed to delete config on panel', ['config_id' => $config->id]);
+            DB::transaction(function () use ($config) {
+                // Perform final settlement BEFORE deletion for wallet-based resellers
+                $settlementResult = ['status' => 'skipped', 'cost' => 0, 'charged_bytes' => 0];
+                $reseller = $config->reseller;
+                if ($reseller && $reseller->type === 'wallet') {
+                    $chargingService = app(WalletChargingService::class);
+                    $settlementResult = $chargingService->finalSettlementForConfig($config, 'delete_config');
                 }
-            }
 
-            $config->update(['status' => 'deleted']);
-            $config->delete(); // Soft delete
+                if ($config->panel && $config->panel_user_id) {
+                    $credentials = $config->panel->getCredentials();
+                    $provisioner = new \Modules\Reseller\Services\ResellerProvisioner;
 
-            ResellerConfigEvent::create([
-                'reseller_config_id' => $config->id,
-                'type' => 'deleted',
-                'meta' => ['deleted_at' => now()->toDateTimeString()],
-            ]);
+                    $success = $provisioner->deleteUser(
+                        $config->panel_type,
+                        $credentials,
+                        $config->panel_user_id
+                    );
 
-            // Create audit log entry
-            AuditLog::log(
-                action: 'config_deleted',
-                targetType: 'config',
-                targetId: $config->id,
-                reason: 'admin_action',
-                meta: [
-                    'deleted_at' => now()->toDateTimeString(),
-                    'panel_id' => $config->panel_id,
-                ]
-            );
+                    if (! $success) {
+                        Log::warning('Failed to delete config on panel', ['config_id' => $config->id]);
+                    }
+                }
+
+                $config->update(['status' => 'deleted']);
+                $config->delete(); // Soft delete
+
+                ResellerConfigEvent::create([
+                    'reseller_config_id' => $config->id,
+                    'type' => 'deleted',
+                    'meta' => [
+                        'deleted_at' => now()->toDateTimeString(),
+                        'settlement_status' => $settlementResult['status'],
+                        'settlement_cost' => $settlementResult['cost'],
+                        'settlement_charged_bytes' => $settlementResult['charged_bytes'],
+                    ],
+                ]);
+
+                // Create audit log entry
+                AuditLog::log(
+                    action: 'config_deleted',
+                    targetType: 'config',
+                    targetId: $config->id,
+                    reason: 'admin_action',
+                    meta: [
+                        'deleted_at' => now()->toDateTimeString(),
+                        'panel_id' => $config->panel_id,
+                        'settlement_status' => $settlementResult['status'],
+                        'settlement_cost' => $settlementResult['cost'],
+                    ]
+                );
+            });
 
             Notification::make()
                 ->success()

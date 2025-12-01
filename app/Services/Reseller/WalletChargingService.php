@@ -3,16 +3,24 @@
 namespace App\Services\Reseller;
 
 use App\Models\AuditLog;
+use App\Models\BillingLedgerEntry;
 use App\Models\Panel;
 use App\Models\Reseller;
+use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
 use App\Models\ResellerUsageSnapshot;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class WalletChargingService
 {
+    /**
+     * Number of bytes per gigabyte for traffic calculations.
+     */
+    private const BYTES_PER_GB = 1024 * 1024 * 1024;
+
     /**
      * Charge a wallet-based reseller for their traffic usage.
      *
@@ -111,7 +119,7 @@ class WalletChargingService
         }
 
         // Convert bytes to GB and calculate cost
-        $deltaGB = $deltaBytes / (1024 * 1024 * 1024);
+        $deltaGB = $deltaBytes / self::BYTES_PER_GB;
         $pricePerGB = $reseller->getWalletPricePerGb();
 
         // Calculate cost in Toman currency
@@ -427,6 +435,220 @@ class WalletChargingService
         Log::info("Disabled {$disabledCount} configs for wallet reseller {$reseller->id}");
 
         return $disabledCount;
+    }
+
+    /**
+     * Perform final settlement for a single config before reset or deletion.
+     * This ensures any outstanding usage is charged before the operation.
+     *
+     * Uses cache lock for idempotency to prevent double-charging within a short window.
+     *
+     * @param  ResellerConfig  $config  The config to settle
+     * @param  string  $actionType  The action type ('reset_traffic' or 'delete_config')
+     * @return array Result of the settlement operation
+     */
+    public function finalSettlementForConfig(ResellerConfig $config, string $actionType = 'reset_traffic'): array
+    {
+        $reseller = $config->reseller;
+
+        // Skip non-wallet resellers
+        if (! $reseller || $reseller->type !== 'wallet') {
+            Log::info('final_settlement_skip_non_wallet', [
+                'config_id' => $config->id,
+                'reseller_id' => $reseller?->id,
+                'action_type' => $actionType,
+            ]);
+
+            return [
+                'status' => 'skipped',
+                'reason' => 'not_wallet_type',
+                'charged' => false,
+                'cost' => 0,
+                'charged_bytes' => 0,
+            ];
+        }
+
+        // Skip if wallet charging is disabled
+        if (! config('billing.wallet.charge_enabled', true)) {
+            Log::info('final_settlement_skip_disabled', [
+                'config_id' => $config->id,
+                'reseller_id' => $reseller->id,
+                'action_type' => $actionType,
+            ]);
+
+            return [
+                'status' => 'skipped',
+                'reason' => 'charging_disabled',
+                'charged' => false,
+                'cost' => 0,
+                'charged_bytes' => 0,
+            ];
+        }
+
+        // Idempotency guard using cache lock
+        $lockKey = "final_settlement:{$config->id}:{$actionType}";
+        $lockTtl = 30; // 30 seconds lock
+
+        // Check if this config was recently settled for this action
+        if (Cache::has($lockKey)) {
+            Log::info('final_settlement_skip_idempotency', [
+                'config_id' => $config->id,
+                'reseller_id' => $reseller->id,
+                'action_type' => $actionType,
+                'lock_key' => $lockKey,
+            ]);
+
+            return [
+                'status' => 'skipped',
+                'reason' => 'idempotency_guard',
+                'charged' => false,
+                'cost' => 0,
+                'charged_bytes' => 0,
+            ];
+        }
+
+        // Acquire lock
+        Cache::put($lockKey, true, $lockTtl);
+
+        // Calculate outstanding usage using snapshot-based approach (same as chargeForReseller)
+        // This ensures consistency with the hourly charging mechanism
+        $currentTotalBytes = $this->calculateTotalUsageBytes($reseller);
+
+        // Get the last snapshot to calculate delta
+        $lastSnapshot = $reseller->usageSnapshots()
+            ->orderBy('measured_at', 'desc')
+            ->first();
+
+        // Calculate delta (traffic used since last snapshot)
+        $outstandingBytes = 0;
+        if ($lastSnapshot) {
+            $outstandingBytes = max(0, $currentTotalBytes - $lastSnapshot->total_bytes);
+        } else {
+            // First snapshot - all current usage is outstanding
+            $outstandingBytes = $currentTotalBytes;
+        }
+
+        // Skip if no outstanding usage
+        if ($outstandingBytes <= 0) {
+            Log::info('final_settlement_skip_no_delta', [
+                'config_id' => $config->id,
+                'reseller_id' => $reseller->id,
+                'action_type' => $actionType,
+                'current_total_bytes' => $currentTotalBytes,
+                'last_snapshot_bytes' => $lastSnapshot ? $lastSnapshot->total_bytes : 0,
+            ]);
+
+            return [
+                'status' => 'skipped',
+                'reason' => 'no_outstanding_usage',
+                'charged' => false,
+                'cost' => 0,
+                'charged_bytes' => 0,
+            ];
+        }
+
+        // Calculate cost
+        $outstandingGB = $outstandingBytes / self::BYTES_PER_GB;
+        $pricePerGB = $reseller->getWalletPricePerGb();
+        $cost = (int) ceil($outstandingGB * $pricePerGB);
+
+        Log::info('final_settlement_calculation', [
+            'config_id' => $config->id,
+            'reseller_id' => $reseller->id,
+            'action_type' => $actionType,
+            'current_total_bytes' => $currentTotalBytes,
+            'last_snapshot_bytes' => $lastSnapshot ? $lastSnapshot->total_bytes : 0,
+            'outstanding_bytes' => $outstandingBytes,
+            'outstanding_gb' => round($outstandingGB, 4),
+            'price_per_gb' => $pricePerGB,
+            'cost' => $cost,
+        ]);
+
+        // Apply charge within transaction
+        return DB::transaction(function () use ($config, $reseller, $actionType, $outstandingBytes, $cost, $pricePerGB, $currentTotalBytes) {
+            $oldBalance = $reseller->wallet_balance;
+            $newBalance = $oldBalance - $cost;
+
+            // Deduct from wallet
+            $reseller->update(['wallet_balance' => $newBalance]);
+
+            // Update config meta for tracking purposes
+            $meta = $config->meta ?? [];
+            $meta['last_settlement_at'] = now()->toIso8601String();
+            $meta['last_settlement_action'] = $actionType;
+            $meta['last_settlement_bytes'] = $outstandingBytes;
+            $meta['last_settlement_cost'] = $cost;
+            $config->update(['meta' => $meta]);
+
+            // Create billing ledger entry
+            BillingLedgerEntry::create([
+                'reseller_id' => $reseller->id,
+                'reseller_config_id' => $config->id,
+                'action_type' => $actionType,
+                'charged_bytes' => $outstandingBytes,
+                'amount_charged' => $cost,
+                'price_per_gb' => $pricePerGB,
+                'wallet_balance_before' => $oldBalance,
+                'wallet_balance_after' => $newBalance,
+                'meta' => [
+                    'config_external_username' => $config->external_username,
+                    'usage_bytes_at_settlement' => $config->usage_bytes,
+                    'settled_usage_bytes_at_settlement' => (int) data_get($config->meta, 'settled_usage_bytes', 0),
+                    'timestamp' => now()->toIso8601String(),
+                ],
+            ]);
+
+            // Create config event for audit trail
+            ResellerConfigEvent::create([
+                'reseller_config_id' => $config->id,
+                'type' => 'final_settlement',
+                'meta' => [
+                    'action_type' => $actionType,
+                    'charged_bytes' => $outstandingBytes,
+                    'cost' => $cost,
+                    'price_per_gb' => $pricePerGB,
+                    'old_balance' => $oldBalance,
+                    'new_balance' => $newBalance,
+                ],
+            ]);
+
+            Log::info('final_settlement_applied', [
+                'config_id' => $config->id,
+                'reseller_id' => $reseller->id,
+                'action_type' => $actionType,
+                'charged_bytes' => $outstandingBytes,
+                'cost' => $cost,
+                'old_balance' => $oldBalance,
+                'new_balance' => $newBalance,
+            ]);
+
+            // Create a snapshot to sync with the hourly charging system
+            // This ensures chargeForReseller doesn't double-charge for this usage
+            // Note: We reuse $currentTotalBytes from the outer scope (calculated before transaction)
+            ResellerUsageSnapshot::create([
+                'reseller_id' => $reseller->id,
+                'total_bytes' => $currentTotalBytes,
+                'measured_at' => now(),
+                'meta' => [
+                    'cycle_started_at' => now()->startOfMinute()->toIso8601String(),
+                    'cycle_charge_applied' => true,
+                    'delta_bytes' => $outstandingBytes,
+                    'delta_gb' => round($outstandingBytes / self::BYTES_PER_GB, 4),
+                    'cost' => $cost,
+                    'price_per_gb' => $pricePerGB,
+                    'source' => "final_settlement:{$actionType}",
+                    'config_id' => $config->id,
+                ],
+            ]);
+
+            return [
+                'status' => 'charged',
+                'charged' => true,
+                'cost' => $cost,
+                'charged_bytes' => $outstandingBytes,
+                'new_balance' => $newBalance,
+            ];
+        });
     }
 
     /**

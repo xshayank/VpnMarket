@@ -165,4 +165,74 @@ Run tests with:
 php artisan test tests/Unit/WalletChargingServiceTest.php
 php artisan test tests/Feature/WalletChargingLivewireIntegrationTest.php
 php artisan test tests/Feature/WalletChargingCommandServiceTest.php
+php artisan test tests/Feature/FinalSettlementBeforeResetDeleteTest.php
 ```
+
+## Final Settlement Before Reset/Delete
+
+### Overview
+
+When a reseller resets or deletes a config, the system ensures that any outstanding (uncharged) usage is charged **before** the reset/delete operation. This prevents usage from being lost or avoided through config manipulation.
+
+### How It Works
+
+1. **Before Reset**: When `resetTraffic` is called, the `finalSettlementForConfig` method calculates any outstanding usage (current total - last snapshot) and charges it to the wallet.
+
+2. **Before Delete**: When `deleteConfig` is called, the same final settlement is applied before soft-deleting the config.
+
+3. **Snapshot-Based Tracking**: The settlement uses the same snapshot-based delta calculation as the hourly command, ensuring consistency and preventing double-charging.
+
+### Key Behaviors
+
+- **No Double Charging**: If the hourly command has already charged for current usage, the reset/delete settlement will find no outstanding delta and skip charging.
+
+- **Idempotency Guards**: A cache lock prevents multiple settlement calls within a short time window for the same config/action.
+
+- **Traffic Preservation**: When resetting, the current `usage_bytes` is added to `settled_usage_bytes` in the config meta, preserving the total historical usage for reporting.
+
+- **Soft Deletion**: Deleted configs are soft-deleted, preserving all historical data including usage and settlement information.
+
+### Billing Ledger
+
+All final settlements create entries in the `billing_ledger_entries` table:
+
+| Column | Description |
+|--------|-------------|
+| `reseller_id` | The reseller being charged |
+| `reseller_config_id` | The config being reset/deleted |
+| `action_type` | `reset_traffic` or `delete_config` |
+| `charged_bytes` | Bytes charged in this settlement |
+| `amount_charged` | Amount in Toman |
+| `price_per_gb` | Price per GB at time of charge |
+| `wallet_balance_before` | Balance before settlement |
+| `wallet_balance_after` | Balance after settlement |
+| `meta` | Additional context (timestamps, usage details) |
+
+### Traffic-Based Resellers
+
+For traffic-based resellers (not wallet-based):
+- No wallet deduction occurs
+- `settled_usage_bytes` is still tracked to preserve historical usage
+- Total usage calculation includes both `usage_bytes` and `settled_usage_bytes`
+
+### Example Scenario
+
+1. Config A has 5GB usage, no prior charges
+2. Hourly command runs: charges 5GB, creates snapshot at 5GB
+3. Config A accumulates 2GB more (now 7GB total)
+4. Reseller resets Config A:
+   - Settlement calculates: 7GB current - 5GB snapshot = 2GB outstanding
+   - Charges 2GB to wallet
+   - Creates new snapshot at 7GB
+   - Resets `usage_bytes` to 0, adds 7GB to `settled_usage_bytes`
+5. Next hourly command: finds 7GB in snapshot, 7GB settled = 0 delta, no charge
+
+### Code References
+
+- `WalletChargingService::finalSettlementForConfig()` - Main settlement logic
+- `ConfigsManager::resetTraffic()` - Livewire reset handler
+- `ConfigsManager::deleteConfig()` - Livewire delete handler
+- `ConfigsRelationManager::resetConfigUsage()` - Admin panel reset handler
+- `ConfigsRelationManager::deleteConfig()` - Admin panel delete handler
+- `ConfigController::resetUsage()` - API reset handler
+- `ConfigController::destroy()` - API delete handler

@@ -556,6 +556,15 @@ class ConfigsManager extends Component
         try {
             DB::transaction(function () use ($config) {
                 $oldUsageBytes = $config->usage_bytes;
+                $oldSettledBytes = (int) data_get($config->meta, 'settled_usage_bytes', 0);
+
+                // Perform final settlement BEFORE reset for wallet-based resellers
+                // This ensures any outstanding usage is charged first
+                $settlementResult = ['status' => 'skipped', 'cost' => 0, 'charged_bytes' => 0];
+                if ($this->reseller && $this->reseller->isWalletBased()) {
+                    $chargingService = app(WalletChargingService::class);
+                    $settlementResult = $chargingService->finalSettlementForConfig($config, 'reset_traffic');
+                }
 
                 // Try to reset on remote panel first
                 $panelResetSuccess = false;
@@ -574,8 +583,14 @@ class ConfigsManager extends Component
                 }
 
                 // Reset local usage counter
+                // Preserve settled_usage_bytes by adding current usage to it
+                $meta = $config->meta ?? [];
+                $meta['settled_usage_bytes'] = $oldSettledBytes + $oldUsageBytes;
+                $meta['last_reset_at'] = now()->toIso8601String();
+
                 $config->update([
                     'usage_bytes' => 0,
+                    'meta' => $meta,
                 ]);
 
                 // Create audit log entry
@@ -585,7 +600,12 @@ class ConfigsManager extends Component
                     'meta' => [
                         'user_id' => Auth::id(),
                         'old_usage_bytes' => $oldUsageBytes,
+                        'old_settled_bytes' => $oldSettledBytes,
+                        'new_settled_bytes' => $oldSettledBytes + $oldUsageBytes,
                         'panel_reset_success' => $panelResetSuccess,
+                        'settlement_status' => $settlementResult['status'],
+                        'settlement_cost' => $settlementResult['cost'],
+                        'settlement_charged_bytes' => $settlementResult['charged_bytes'],
                         'reset_at' => now()->toDateTimeString(),
                     ],
                 ]);
@@ -595,8 +615,10 @@ class ConfigsManager extends Component
 
             $this->loadStats();
 
-            // Trigger immediate wallet charging after traffic reset
-            $this->triggerImmediateWalletCharge('reset_traffic');
+            // Refresh reseller balance after settlement
+            if ($this->reseller) {
+                $this->reseller->refresh();
+            }
         } catch (\Exception $e) {
             Log::error('Traffic reset failed: ' . $e->getMessage());
             session()->flash('error', 'خطا در ریست کردن ترافیک: ' . $e->getMessage());
@@ -659,24 +681,47 @@ class ConfigsManager extends Component
         }
 
         try {
-            $provisioner = new ResellerProvisioner;
-            $panel = $config->panel_id ? Panel::find($config->panel_id) : null;
+            DB::transaction(function () use ($config) {
+                // Perform final settlement BEFORE deletion for wallet-based resellers
+                // This ensures any outstanding usage is charged first
+                $settlementResult = ['status' => 'skipped', 'cost' => 0, 'charged_bytes' => 0];
+                if ($this->reseller && $this->reseller->isWalletBased()) {
+                    $chargingService = app(WalletChargingService::class);
+                    $settlementResult = $chargingService->finalSettlementForConfig($config, 'delete_config');
+                }
 
-            if ($panel) {
-                $provisioner->deleteUser($config->panel_type, $panel->getCredentials(), $config->panel_user_id);
-            }
+                $provisioner = new ResellerProvisioner;
+                $panel = $config->panel_id ? Panel::find($config->panel_id) : null;
 
-            $config->update(['status' => 'deleted']);
-            $config->delete();
+                if ($panel) {
+                    $provisioner->deleteUser($config->panel_type, $panel->getCredentials(), $config->panel_user_id);
+                }
 
-            ResellerConfigEvent::create([
-                'reseller_config_id' => $config->id,
-                'type' => 'deleted',
-                'meta' => ['user_id' => Auth::id()],
-            ]);
+                // Soft-delete: keep the charged_bytes for history
+                $config->update(['status' => 'deleted']);
+                $config->delete(); // This uses SoftDeletes
 
-            session()->flash('success', 'کانفیگ با موفقیت حذف شد.');
+                ResellerConfigEvent::create([
+                    'reseller_config_id' => $config->id,
+                    'type' => 'deleted',
+                    'meta' => [
+                        'user_id' => Auth::id(),
+                        'settlement_status' => $settlementResult['status'],
+                        'settlement_cost' => $settlementResult['cost'],
+                        'settlement_charged_bytes' => $settlementResult['charged_bytes'],
+                        'deleted_at' => now()->toDateTimeString(),
+                    ],
+                ]);
+
+                session()->flash('success', 'کانفیگ با موفقیت حذف شد.');
+            });
+
             $this->loadStats();
+
+            // Refresh reseller balance after settlement
+            if ($this->reseller) {
+                $this->reseller->refresh();
+            }
         } catch (\Exception $e) {
             Log::error('Config deletion failed: ' . $e->getMessage());
             session()->flash('error', 'خطا در حذف کانفیگ.');

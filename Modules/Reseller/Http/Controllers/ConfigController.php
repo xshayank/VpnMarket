@@ -10,6 +10,7 @@ use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
 use App\Services\ConfigNameGenerator;
 use App\Services\PanelDataService;
+use App\Services\Reseller\WalletChargingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -577,6 +578,13 @@ class ConfigController extends Controller
             abort(403);
         }
 
+        // Perform final settlement BEFORE deletion for wallet-based resellers
+        $settlementResult = ['status' => 'skipped', 'cost' => 0, 'charged_bytes' => 0];
+        if ($reseller->type === 'wallet') {
+            $chargingService = app(WalletChargingService::class);
+            $settlementResult = $chargingService->finalSettlementForConfig($config, 'delete_config');
+        }
+
         // Try to delete on remote panel
         $remoteFailed = false;
         if ($config->panel_id) {
@@ -605,6 +613,9 @@ class ConfigController extends Controller
             'meta' => [
                 'user_id' => $request->user()->id,
                 'remote_failed' => $remoteFailed,
+                'settlement_status' => $settlementResult['status'],
+                'settlement_cost' => $settlementResult['cost'],
+                'settlement_charged_bytes' => $settlementResult['charged_bytes'],
             ],
         ]);
 
@@ -613,10 +624,12 @@ class ConfigController extends Controller
             action: 'config_deleted',
             targetType: 'config',
             targetId: $config->id,
-            reason: 'admin_action',
+            reason: 'reseller_action',
             meta: [
                 'remote_failed' => $remoteFailed,
                 'panel_id' => $config->panel_id,
+                'settlement_status' => $settlementResult['status'],
+                'settlement_cost' => $settlementResult['cost'],
             ]
         );
 
@@ -820,8 +833,15 @@ class ConfigController extends Controller
 
         $remoteResultFinal = null;
         $toSettleFinal = $toSettle;
+        $settlementResultFinal = ['status' => 'skipped', 'cost' => 0, 'charged_bytes' => 0];
 
-        DB::transaction(function () use ($config, $toSettle, $request, &$remoteResultFinal) {
+        DB::transaction(function () use ($config, $toSettle, $request, $reseller, &$remoteResultFinal, &$settlementResultFinal) {
+            // Perform final settlement BEFORE reset for wallet-based resellers
+            if ($reseller->type === 'wallet') {
+                $chargingService = app(WalletChargingService::class);
+                $settlementResultFinal = $chargingService->finalSettlementForConfig($config, 'reset_traffic');
+            }
+
             // Settle current usage
             $meta = $config->meta ?? [];
             $currentSettled = (int) data_get($meta, 'settled_usage_bytes', 0);
@@ -889,6 +909,8 @@ class ConfigController extends Controller
                 'total_from_configs' => $totalUsageBytesFromDB,
                 'admin_forgiven_bytes' => $adminForgivenBytes,
                 'new_reseller_usage_bytes' => $effectiveUsageBytes,
+                'settlement_status' => $settlementResultFinal['status'],
+                'settlement_cost' => $settlementResultFinal['cost'],
             ]);
 
             ResellerConfigEvent::create([
@@ -902,6 +924,9 @@ class ConfigController extends Controller
                     'remote_success' => $remoteResult['success'],
                     'attempts' => $remoteResult['attempts'],
                     'last_error' => $remoteResult['last_error'],
+                    'settlement_status' => $settlementResultFinal['status'],
+                    'settlement_cost' => $settlementResultFinal['cost'],
+                    'settlement_charged_bytes' => $settlementResultFinal['charged_bytes'],
                 ],
             ]);
 
@@ -918,6 +943,8 @@ class ConfigController extends Controller
                     'last_reset_at' => $meta['last_reset_at'],
                     'remote_success' => $remoteResult['success'],
                     'reseller_id' => $config->reseller_id,
+                    'settlement_status' => $settlementResultFinal['status'],
+                    'settlement_cost' => $settlementResultFinal['cost'],
                 ]
             );
         });
