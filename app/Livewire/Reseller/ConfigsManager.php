@@ -9,6 +9,7 @@ use App\Models\ResellerConfig;
 use App\Models\ResellerConfigEvent;
 use App\Services\ConfigNameGenerator;
 use App\Services\PanelDataService;
+use App\Services\Reseller\WalletChargingService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -134,6 +135,46 @@ class ConfigsManager extends Component
                 'is_unlimited_limit' => $isUnlimitedLimit,
                 'days_remaining' => $reseller->window_ends_at ? now()->diffInDays($reseller->window_ends_at, false) : null,
             ];
+        }
+    }
+
+    /**
+     * Trigger immediate wallet charging for the reseller after panel actions.
+     * Only applies to wallet-based resellers and handles errors gracefully.
+     *
+     * @param  string  $action  The panel action that triggered the charge
+     * @return void
+     */
+    protected function triggerImmediateWalletCharge(string $action): void
+    {
+        // Only charge wallet-based resellers
+        if (! $this->reseller || ! $this->reseller->isWalletBased()) {
+            return;
+        }
+
+        try {
+            $chargingService = app(WalletChargingService::class);
+            $result = $chargingService->chargeFromPanel($this->reseller, $action);
+
+            // Refresh the reseller to get updated balance
+            $this->reseller->refresh();
+
+            // Log result for debugging
+            if ($result['status'] === 'charged') {
+                Log::info('wallet_charge_panel_completed', [
+                    'reseller_id' => $this->reseller->id,
+                    'action' => $action,
+                    'delta_bytes' => $result['delta_bytes'] ?? 0,
+                    'cost' => $result['cost'],
+                ]);
+            }
+        } catch (\Exception $e) {
+            // Log the error but don't fail the panel action
+            Log::error('wallet_charge_panel_error', [
+                'reseller_id' => $this->reseller->id,
+                'action' => $action,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -400,6 +441,9 @@ class ConfigsManager extends Component
 
             $this->closeCreateModal();
             $this->loadStats();
+
+            // Trigger immediate wallet charging after config creation
+            $this->triggerImmediateWalletCharge('create_config');
         } catch (\Exception $e) {
             Log::error('Config creation failed: ' . $e->getMessage());
             session()->flash('error', 'خطا در ایجاد کانفیگ: ' . $e->getMessage());
@@ -492,6 +536,9 @@ class ConfigsManager extends Component
 
             $this->closeEditModal();
             $this->loadStats();
+
+            // Trigger immediate wallet charging after config edit
+            $this->triggerImmediateWalletCharge('edit_config');
         } catch (\Exception $e) {
             Log::error('Config update failed: ' . $e->getMessage());
             session()->flash('error', 'خطا در بروزرسانی کانفیگ: ' . $e->getMessage());
@@ -547,6 +594,9 @@ class ConfigsManager extends Component
             });
 
             $this->loadStats();
+
+            // Trigger immediate wallet charging after traffic reset
+            $this->triggerImmediateWalletCharge('reset_traffic');
         } catch (\Exception $e) {
             Log::error('Traffic reset failed: ' . $e->getMessage());
             session()->flash('error', 'خطا در ریست کردن ترافیک: ' . $e->getMessage());
@@ -636,6 +686,10 @@ class ConfigsManager extends Component
     public function syncStats()
     {
         $this->loadStats();
+
+        // Trigger immediate wallet charging after stats refresh
+        $this->triggerImmediateWalletCharge('refresh_configs');
+
         session()->flash('success', 'آمار بروزرسانی شد.');
     }
 

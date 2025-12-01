@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Reseller;
+use App\Services\Reseller\WalletChargingService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -25,6 +26,20 @@ class ChargeWalletResellerOnce extends Command
     protected $description = 'Charge a single wallet-based reseller (supports dry-run mode)';
 
     /**
+     * The wallet charging service instance.
+     */
+    protected WalletChargingService $chargingService;
+
+    /**
+     * Create a new command instance.
+     */
+    public function __construct(WalletChargingService $chargingService)
+    {
+        parent::__construct();
+        $this->chargingService = $chargingService;
+    }
+
+    /**
      * Execute the console command.
      */
     public function handle()
@@ -32,7 +47,7 @@ class ChargeWalletResellerOnce extends Command
         $resellerId = $this->option('reseller');
         $dryRun = $this->option('dry-run');
 
-        if (!$resellerId) {
+        if (! $resellerId) {
             $this->error('Error: --reseller option is required');
             $this->info('');
             $this->info('Usage:');
@@ -49,13 +64,15 @@ class ChargeWalletResellerOnce extends Command
         // Find the reseller
         $reseller = Reseller::find($resellerId);
 
-        if (!$reseller) {
+        if (! $reseller) {
             $this->error("Error: Reseller with ID {$resellerId} not found");
+
             return Command::FAILURE;
         }
 
         if ($reseller->type !== 'wallet') {
             $this->error("Error: Reseller {$resellerId} is not a wallet-based reseller (type: {$reseller->type})");
+
             return Command::FAILURE;
         }
 
@@ -65,12 +82,9 @@ class ChargeWalletResellerOnce extends Command
         }
         $this->info('');
 
-        $cycleStartedAt = now()->startOfMinute()->toIso8601String();
-
         try {
-            // Use the shared logic from ChargeWalletResellersHourly
-            $hourlyCommand = new ChargeWalletResellersHourly();
-            $result = $hourlyCommand->chargeResellerWithSafeguards($reseller, $cycleStartedAt, $dryRun);
+            // Use the charging service directly
+            $result = $this->chargingService->chargeForReseller($reseller, null, $dryRun, 'command:once');
 
             // Display results in a table
             $this->displayResults($reseller, $result, $dryRun);
@@ -83,6 +97,7 @@ class ChargeWalletResellerOnce extends Command
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return Command::FAILURE;
         }
     }
@@ -92,12 +107,8 @@ class ChargeWalletResellerOnce extends Command
      */
     protected function displayResults(Reseller $reseller, array $result, bool $dryRun): void
     {
-        // Calculate current usage
-        $currentTotalBytes = $reseller->configs()
-            ->get()
-            ->sum(function ($config) {
-                return $config->usage_bytes + (int) data_get($config->meta, 'settled_usage_bytes', 0);
-            });
+        // Calculate current usage using the service
+        $currentTotalBytes = $this->chargingService->calculateTotalUsageBytes($reseller);
 
         $lastSnapshot = $reseller->usageSnapshots()
             ->orderBy('measured_at', 'desc')
