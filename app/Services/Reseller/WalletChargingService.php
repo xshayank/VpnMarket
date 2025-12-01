@@ -17,6 +17,11 @@ use Illuminate\Support\Facades\Log;
 class WalletChargingService
 {
     /**
+     * Number of bytes per gigabyte for traffic calculations.
+     */
+    private const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+    /**
      * Charge a wallet-based reseller for their traffic usage.
      *
      * This method calculates the traffic delta since the last snapshot,
@@ -114,7 +119,7 @@ class WalletChargingService
         }
 
         // Convert bytes to GB and calculate cost
-        $deltaGB = $deltaBytes / (1024 * 1024 * 1024);
+        $deltaGB = $deltaBytes / self::BYTES_PER_GB;
         $pricePerGB = $reseller->getWalletPricePerGb();
 
         // Calculate cost in Toman currency
@@ -543,7 +548,7 @@ class WalletChargingService
         }
 
         // Calculate cost
-        $outstandingGB = $outstandingBytes / (1024 * 1024 * 1024);
+        $outstandingGB = $outstandingBytes / self::BYTES_PER_GB;
         $pricePerGB = $reseller->getWalletPricePerGb();
         $cost = (int) ceil($outstandingGB * $pricePerGB);
 
@@ -619,7 +624,7 @@ class WalletChargingService
 
             // Create a snapshot to sync with the hourly charging system
             // This ensures chargeForReseller doesn't double-charge for this usage
-            $currentTotalBytes = $this->calculateTotalUsageBytes($reseller);
+            // Note: We reuse $currentTotalBytes from the outer scope (calculated before transaction)
             ResellerUsageSnapshot::create([
                 'reseller_id' => $reseller->id,
                 'total_bytes' => $currentTotalBytes,
@@ -628,7 +633,7 @@ class WalletChargingService
                     'cycle_started_at' => now()->startOfMinute()->toIso8601String(),
                     'cycle_charge_applied' => true,
                     'delta_bytes' => $outstandingBytes,
-                    'delta_gb' => round($outstandingBytes / (1024 * 1024 * 1024), 4),
+                    'delta_gb' => round($outstandingBytes / self::BYTES_PER_GB, 4),
                     'cost' => $cost,
                     'price_per_gb' => $pricePerGB,
                     'source' => "final_settlement:{$actionType}",
