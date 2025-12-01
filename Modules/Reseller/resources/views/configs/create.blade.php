@@ -240,6 +240,44 @@
                         </div>
                     </template>
 
+                    <!-- L2TP settings - Shown for Eylandoo panels -->
+                    <template x-if="selectedPanel && selectedPanel.panel_type === 'eylandoo'">
+                        <div class="mb-4 md:mb-6" x-data="{ l2tpEnabled: false }">
+                            <label class="flex items-center text-sm md:text-base text-gray-900 dark:text-gray-100 min-h-[44px] sm:min-h-0 mb-2">
+                                <input type="checkbox" name="enable_l2tp" x-model="l2tpEnabled" value="1"
+                                    class="w-5 h-5 md:w-4 md:h-4 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2">
+                                فعال‌سازی L2TP
+                            </label>
+                            <template x-if="l2tpEnabled">
+                                <div>
+                                    <label class="block text-xs md:text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">رمز عبور L2TP (اختیاری)</label>
+                                    <input type="password" name="l2tp_password" maxlength="128" 
+                                        class="w-full h-12 md:h-10 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm md:text-base"
+                                        placeholder="رمز عبور مشخص یا خالی برای تولید خودکار">
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <!-- Cisco settings - Shown for Eylandoo panels -->
+                    <template x-if="selectedPanel && selectedPanel.panel_type === 'eylandoo'">
+                        <div class="mb-4 md:mb-6" x-data="{ ciscoEnabled: false }">
+                            <label class="flex items-center text-sm md:text-base text-gray-900 dark:text-gray-100 min-h-[44px] sm:min-h-0 mb-2">
+                                <input type="checkbox" name="enable_cisco" x-model="ciscoEnabled" value="1"
+                                    class="w-5 h-5 md:w-4 md:h-4 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2">
+                                فعال‌سازی Cisco AnyConnect
+                            </label>
+                            <template x-if="ciscoEnabled">
+                                <div>
+                                    <label class="block text-xs md:text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">رمز عبور Cisco (اختیاری)</label>
+                                    <input type="password" name="cisco_password" maxlength="128" 
+                                        class="w-full h-12 md:h-10 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm md:text-base"
+                                        placeholder="رمز عبور مشخص یا خالی برای تولید خودکار">
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
                     <div class="flex flex-col sm:flex-row gap-3 md:gap-4 mt-6">
                         <button type="submit" class="w-full sm:w-auto px-4 py-3 md:py-2 h-12 md:h-10 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm md:text-base font-medium">
                             ایجاد کانفیگ

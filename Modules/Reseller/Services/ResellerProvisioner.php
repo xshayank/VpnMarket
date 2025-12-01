@@ -123,13 +123,13 @@ class ResellerProvisioner
      */
     public function generateEnhancedUsername(string $requestedUsername, ?callable $existsChecker = null): array
     {
-        $generator = new UsernameGenerator();
-        
+        $generator = new UsernameGenerator;
+
         // If no exists checker provided, use the default database checker
         if ($existsChecker === null) {
             $existsChecker = $generator->createDatabaseExistsChecker();
         }
-        
+
         return $generator->generatePanelUsername($requestedUsername, $existsChecker);
     }
 
@@ -138,26 +138,25 @@ class ResellerProvisioner
      * This can be used for extra safety when collision handling needs to check the panel directly
      *
      * @param  Panel  $panel  The panel to check against
-     * @return callable
      */
     public function createPanelExistsChecker(Panel $panel): callable
     {
-        return function (string $username) use ($panel): bool {
+        return function (string $username): bool {
             // First check local database
             $localExists = ResellerConfig::where('panel_username', $username)
                 ->orWhere('external_username', $username)
                 ->exists();
-            
+
             if ($localExists) {
                 return true;
             }
-            
+
             // Note: Remote panel check is disabled by default for performance.
             // Enable remote checking by uncommenting the following line if you need
             // to verify usernames against the panel API. This adds latency but
             // provides extra safety for edge cases where the local DB is out of sync.
             // To enable, uncomment: return $this->checkUsernameExistsOnPanel($panel, $username);
-            
+
             return false;
         };
     }
@@ -167,14 +166,13 @@ class ResellerProvisioner
      *
      * @param  Panel  $panel  The panel to check
      * @param  string  $username  The username to check
-     * @return bool
      */
     protected function checkUsernameExistsOnPanel(Panel $panel, string $username): bool
     {
         try {
             $credentials = $panel->getCredentials();
             $panelType = strtolower(trim($panel->panel_type ?? ''));
-            
+
             switch ($panelType) {
                 case 'marzneshin':
                     $nodeHostname = $credentials['extra']['node_hostname'] ?? $credentials['node_hostname'] ?? '';
@@ -186,10 +184,11 @@ class ResellerProvisioner
                     );
                     if ($service->login()) {
                         $user = $service->getUser($username);
+
                         return $user !== null;
                     }
                     break;
-                    
+
                 case 'marzban':
                     $nodeHostname = $credentials['extra']['node_hostname'] ?? $credentials['node_hostname'] ?? '';
                     $service = new MarzbanService(
@@ -200,10 +199,11 @@ class ResellerProvisioner
                     );
                     if ($service->login()) {
                         $user = $service->getUser($username);
+
                         return $user !== null;
                     }
                     break;
-                    
+
                 case 'eylandoo':
                     if (empty($credentials['url']) || empty($credentials['api_token'])) {
                         return false;
@@ -215,6 +215,7 @@ class ResellerProvisioner
                         $nodeHostname
                     );
                     $user = $service->getUser($username);
+
                     return $user !== null;
             }
         } catch (\Exception $e) {
@@ -224,7 +225,7 @@ class ResellerProvisioner
                 'error' => $e->getMessage(),
             ]);
         }
-        
+
         return false;
     }
 
@@ -417,10 +418,11 @@ class ResellerProvisioner
         // Validate credentials before attempting API calls
         if (empty($credentials['url']) || empty($credentials['api_token'])) {
             Log::warning('Eylandoo provision: Missing credentials', [
-                'has_url' => !empty($credentials['url']),
-                'has_api_token' => !empty($credentials['api_token']),
+                'has_url' => ! empty($credentials['url']),
+                'has_api_token' => ! empty($credentials['api_token']),
                 'username' => $username,
             ]);
+
             return null;
         }
 
@@ -444,9 +446,9 @@ class ResellerProvisioner
 
             // Accept both 'nodes' and 'node_ids' parameters and normalize to array of integers
             $nodes = $options['nodes'] ?? $options['node_ids'] ?? [];
-            if (!empty($nodes) && is_array($nodes)) {
+            if (! empty($nodes) && is_array($nodes)) {
                 $nodes = array_map('intval', $nodes);
-            } elseif (!is_array($nodes)) {
+            } elseif (! is_array($nodes)) {
                 $nodes = [];
             }
 
@@ -466,6 +468,22 @@ class ResellerProvisioner
                     'nodes' => $nodes,
                     'nodes_count' => count($nodes),
                 ]);
+            }
+
+            // Add L2TP support if enabled
+            if (isset($options['enable_l2tp'])) {
+                $userData['enable_l2tp'] = (bool) $options['enable_l2tp'];
+                if ($userData['enable_l2tp'] && isset($options['l2tp_password']) && ! empty($options['l2tp_password'])) {
+                    $userData['l2tp_password'] = (string) $options['l2tp_password'];
+                }
+            }
+
+            // Add Cisco support if enabled
+            if (isset($options['enable_cisco'])) {
+                $userData['enable_cisco'] = (bool) $options['enable_cisco'];
+                if ($userData['enable_cisco'] && isset($options['cisco_password']) && ! empty($options['cisco_password'])) {
+                    $userData['cisco_password'] = (string) $options['cisco_password'];
+                }
             }
 
             $result = $service->createUser($userData);
@@ -521,6 +539,7 @@ class ResellerProvisioner
                 'username' => $username,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
@@ -578,6 +597,7 @@ class ResellerProvisioner
                         Log::warning('disableUser Eylandoo: Missing credentials', [
                             'panel_user_id' => $panelUserId,
                         ]);
+
                         return false;
                     }
 
@@ -648,6 +668,7 @@ class ResellerProvisioner
                         Log::warning('enableUser Eylandoo: Missing credentials', [
                             'panel_user_id' => $panelUserId,
                         ]);
+
                         return false;
                     }
 
@@ -675,6 +696,7 @@ class ResellerProvisioner
         try {
             // Use the new provisioner factory for modular, provider-specific implementation
             $provisioner = ProvisionerFactory::forConfig($config);
+
             return $provisioner->enableConfig($config);
         } catch (\Exception $e) {
             Log::error("Failed to enable config {$config->id} via provisioner factory: ".$e->getMessage(), [
@@ -698,6 +720,7 @@ class ResellerProvisioner
         try {
             // Use the new provisioner factory for modular, provider-specific implementation
             $provisioner = ProvisionerFactory::forConfig($config);
+
             return $provisioner->disableConfig($config);
         } catch (\Exception $e) {
             Log::error("Failed to disable config {$config->id} via provisioner factory: ".$e->getMessage(), [
@@ -761,6 +784,7 @@ class ResellerProvisioner
                         Log::warning('deleteUser Eylandoo: Missing credentials', [
                             'panel_user_id' => $panelUserId,
                         ]);
+
                         return false;
                     }
 
@@ -842,6 +866,7 @@ class ResellerProvisioner
                         Log::warning('updateUserLimits Eylandoo: Missing credentials', [
                             'panel_user_id' => $panelUserId,
                         ]);
+
                         return false;
                     }
 
@@ -892,6 +917,7 @@ class ResellerProvisioner
                         if (isset($payload['expire'])) {
                             $updateData['expire'] = $payload['expire'];
                         }
+
                         return $service->updateUser($panelUserId, $updateData);
                     }
                     break;
@@ -917,6 +943,7 @@ class ResellerProvisioner
                                 $updateData['expire'] = $expire->getTimestamp();
                             }
                         }
+
                         return $service->updateUser($panelUserId, $updateData);
                     }
                     break;
@@ -940,6 +967,7 @@ class ResellerProvisioner
                                 $updateData['expiryTime'] = $expire->timestamp * 1000;
                             }
                         }
+
                         return $service->updateUser($panelUserId, $updateData);
                     }
                     break;
@@ -950,6 +978,7 @@ class ResellerProvisioner
                         Log::warning('updateUser Eylandoo: Missing credentials', [
                             'panel_user_id' => $panelUserId,
                         ]);
+
                         return false;
                     }
 
@@ -973,6 +1002,22 @@ class ResellerProvisioner
                     }
                     if (isset($payload['nodes'])) {
                         $updateData['nodes'] = $payload['nodes'];
+                    }
+
+                    // Add L2TP settings if provided
+                    if (array_key_exists('enable_l2tp', $payload)) {
+                        $updateData['enable_l2tp'] = (bool) $payload['enable_l2tp'];
+                        if ($updateData['enable_l2tp'] && isset($payload['l2tp_password']) && ! empty($payload['l2tp_password'])) {
+                            $updateData['l2tp_password'] = (string) $payload['l2tp_password'];
+                        }
+                    }
+
+                    // Add Cisco settings if provided
+                    if (array_key_exists('enable_cisco', $payload)) {
+                        $updateData['enable_cisco'] = (bool) $payload['enable_cisco'];
+                        if ($updateData['enable_cisco'] && isset($payload['cisco_password']) && ! empty($payload['cisco_password'])) {
+                            $updateData['cisco_password'] = (string) $payload['cisco_password'];
+                        }
                     }
 
                     return $service->updateUser($panelUserId, $updateData);
@@ -1036,6 +1081,7 @@ class ResellerProvisioner
                         Log::warning('resetUserUsage Eylandoo: Missing credentials', [
                             'panel_user_id' => $panelUserId,
                         ]);
+
                         return false;
                     }
 
@@ -1062,7 +1108,7 @@ class ResellerProvisioner
      */
     public function fetchEylandooNodes(Panel $panel): array
     {
-        if (!$panel || strtolower(trim($panel->panel_type ?? '')) !== 'eylandoo') {
+        if (! $panel || strtolower(trim($panel->panel_type ?? '')) !== 'eylandoo') {
             return [];
         }
 
@@ -1074,8 +1120,8 @@ class ResellerProvisioner
                 Log::warning('fetchEylandooNodes: Missing credentials', [
                     'panel_id' => $panel->id,
                     'panel_name' => $panel->name,
-                    'has_url' => !empty($credentials['url']),
-                    'has_api_token' => !empty($credentials['api_token']),
+                    'has_url' => ! empty($credentials['url']),
+                    'has_api_token' => ! empty($credentials['api_token']),
                 ]);
 
                 return [];
@@ -1083,11 +1129,12 @@ class ResellerProvisioner
 
             // Short circuit for invalid base URL
             $baseUrl = trim($credentials['url']);
-            if (empty($baseUrl) || !filter_var($baseUrl, FILTER_VALIDATE_URL)) {
+            if (empty($baseUrl) || ! filter_var($baseUrl, FILTER_VALIDATE_URL)) {
                 Log::warning('fetchEylandooNodes: Invalid base URL', [
                     'panel_id' => $panel->id,
                     'panel_name' => $panel->name,
                 ]);
+
                 return [];
             }
 
@@ -1102,12 +1149,13 @@ class ResellerProvisioner
             $nodes = $service->listNodes();
 
             // Ensure we return an array
-            if (!is_array($nodes)) {
+            if (! is_array($nodes)) {
                 Log::warning('fetchEylandooNodes: API returned non-array', [
                     'panel_id' => $panel->id,
                     'panel_name' => $panel->name,
                     'response_type' => gettype($nodes),
                 ]);
+
                 return [];
             }
 

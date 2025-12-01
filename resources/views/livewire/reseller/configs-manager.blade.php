@@ -502,6 +502,40 @@
                                 </div>
                             </template>
 
+                            {{-- L2TP Settings for Eylandoo --}}
+                            <template x-if="selectedPanel && selectedPanel.panel_type === 'eylandoo'">
+                                <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                                    <label class="flex items-center text-sm text-gray-700 dark:text-gray-300 mb-2">
+                                        <input type="checkbox" wire:model.live="enableL2tp"
+                                               class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2">
+                                        فعال‌سازی L2TP
+                                    </label>
+                                    <div x-show="$wire.enableL2tp" x-cloak class="mt-2">
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور L2TP (اختیاری)</label>
+                                        <input type="password" wire:model="l2tpPassword" maxlength="128"
+                                               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500"
+                                               placeholder="رمز عبور مشخص یا خالی برای تولید خودکار">
+                                    </div>
+                                </div>
+                            </template>
+
+                            {{-- Cisco Settings for Eylandoo --}}
+                            <template x-if="selectedPanel && selectedPanel.panel_type === 'eylandoo'">
+                                <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                                    <label class="flex items-center text-sm text-gray-700 dark:text-gray-300 mb-2">
+                                        <input type="checkbox" wire:model.live="enableCisco"
+                                               class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2">
+                                        فعال‌سازی Cisco AnyConnect
+                                    </label>
+                                    <div x-show="$wire.enableCisco" x-cloak class="mt-2">
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور Cisco (اختیاری)</label>
+                                        <input type="password" wire:model="ciscoPassword" maxlength="128"
+                                               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500"
+                                               placeholder="رمز عبور مشخص یا خالی برای تولید خودکار">
+                                    </div>
+                                </div>
+                            </template>
+
                             {{-- Actions --}}
                             <div class="flex gap-3 pt-4">
                                 <button type="submit" 
@@ -602,6 +636,40 @@
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">حداکثر کلاینت‌های همزمان</label>
                                         <input type="number" wire:model="editMaxClients" min="1" max="100"
                                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+
+                                    {{-- L2TP Settings --}}
+                                    <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                                        <label class="flex items-center text-sm text-gray-700 dark:text-gray-300 mb-2">
+                                            <input type="checkbox" wire:model.live="editEnableL2tp"
+                                                   class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2">
+                                            فعال‌سازی L2TP
+                                        </label>
+                                        @if ($editEnableL2tp)
+                                            <div class="mt-2">
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور جدید L2TP (اختیاری)</label>
+                                                <input type="password" wire:model="editL2tpPassword" maxlength="128"
+                                                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500"
+                                                       placeholder="خالی بگذارید برای حفظ رمز قبلی">
+                                            </div>
+                                        @endif
+                                    </div>
+
+                                    {{-- Cisco Settings --}}
+                                    <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                                        <label class="flex items-center text-sm text-gray-700 dark:text-gray-300 mb-2">
+                                            <input type="checkbox" wire:model.live="editEnableCisco"
+                                                   class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2">
+                                            فعال‌سازی Cisco AnyConnect
+                                        </label>
+                                        @if ($editEnableCisco)
+                                            <div class="mt-2">
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور جدید Cisco (اختیاری)</label>
+                                                <input type="password" wire:model="editCiscoPassword" maxlength="128"
+                                                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500"
+                                                       placeholder="خالی بگذارید برای حفظ رمز قبلی">
+                                            </div>
+                                        @endif
                                     </div>
                                 @endif
 

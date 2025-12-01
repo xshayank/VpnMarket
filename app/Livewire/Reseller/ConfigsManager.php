@@ -34,28 +34,59 @@ class ConfigsManager extends Component
 
     // Modal state
     public bool $showCreateModal = false;
+
     public bool $showEditModal = false;
+
     public ?int $editingConfigId = null;
 
     // Create/Edit form fields
     public $usernamePrefix = '';  // New: Username field (prefix) shown to users
+
     public $selectedPanelId = '';
+
     public $trafficLimitGb = '';
+
     public $expiresDays = '';
+
     public $maxClients = 1;
+
     public $comment = '';
+
     public $prefix = '';
+
     public $customName = '';
+
     public $selectedNodeIds = [];
+
     public $selectedServiceIds = [];
+
+    // L2TP/Cisco Multi-Protocol fields
+    public $enableL2tp = false;
+
+    public $l2tpPassword = '';
+
+    public $enableCisco = false;
+
+    public $ciscoPassword = '';
 
     // Edit-specific fields
     public $editTrafficLimitGb = '';
+
     public $editExpiresAt = '';
+
     public $editMaxClients = 1;
+
+    public $editEnableL2tp = false;
+
+    public $editL2tpPassword = '';
+
+    public $editEnableCisco = false;
+
+    public $editCiscoPassword = '';
 
     // Stats
     public $reseller;
+
     public $stats = [];
 
     protected $listeners = ['refreshConfigs' => '$refresh'];
@@ -71,6 +102,10 @@ class ConfigsManager extends Component
             'comment' => 'nullable|string|max:200',
             'prefix' => 'nullable|string|max:50|regex:/^[a-zA-Z0-9_-]+$/',
             'customName' => 'nullable|string|max:100|regex:/^[a-zA-Z0-9_-]+$/',
+            'enableL2tp' => 'nullable|boolean',
+            'l2tpPassword' => 'nullable|string|max:128',
+            'enableCisco' => 'nullable|boolean',
+            'ciscoPassword' => 'nullable|string|max:128',
         ];
     }
 
@@ -143,7 +178,6 @@ class ConfigsManager extends Component
      * Only applies to wallet-based resellers and handles errors gracefully.
      *
      * @param  string  $action  The panel action that triggered the charge
-     * @return void
      */
     protected function triggerImmediateWalletCharge(string $action): void
     {
@@ -214,8 +248,9 @@ class ConfigsManager extends Component
     public function openEditModal($configId)
     {
         $config = ResellerConfig::find($configId);
-        if (!$config || $config->reseller_id !== $this->reseller->id) {
+        if (! $config || $config->reseller_id !== $this->reseller->id) {
             session()->flash('error', 'کانفیگ یافت نشد.');
+
             return;
         }
 
@@ -223,6 +258,10 @@ class ConfigsManager extends Component
         $this->editTrafficLimitGb = round($config->traffic_limit_bytes / (1024 * 1024 * 1024), 2);
         $this->editExpiresAt = $config->expires_at->format('Y-m-d');
         $this->editMaxClients = $config->meta['max_clients'] ?? 1;
+        $this->editEnableL2tp = (bool) ($config->meta['enable_l2tp'] ?? false);
+        $this->editL2tpPassword = ''; // Don't load existing password for security
+        $this->editEnableCisco = (bool) ($config->meta['enable_cisco'] ?? false);
+        $this->editCiscoPassword = ''; // Don't load existing password for security
         $this->showEditModal = true;
     }
 
@@ -233,6 +272,10 @@ class ConfigsManager extends Component
         $this->editTrafficLimitGb = '';
         $this->editExpiresAt = '';
         $this->editMaxClients = 1;
+        $this->editEnableL2tp = false;
+        $this->editL2tpPassword = '';
+        $this->editEnableCisco = false;
+        $this->editCiscoPassword = '';
     }
 
     protected function resetCreateForm()
@@ -247,6 +290,10 @@ class ConfigsManager extends Component
         $this->customName = '';
         $this->selectedNodeIds = [];
         $this->selectedServiceIds = [];
+        $this->enableL2tp = false;
+        $this->l2tpPassword = '';
+        $this->enableCisco = false;
+        $this->ciscoPassword = '';
     }
 
     public function createConfig()
@@ -281,6 +328,7 @@ class ConfigsManager extends Component
             $totalConfigsCount = $reseller->configs()->count();
             if ($totalConfigsCount >= $reseller->config_limit) {
                 session()->flash('error', "Config creation limit reached. Maximum allowed: {$reseller->config_limit}");
+
                 return;
             }
         }
@@ -290,8 +338,9 @@ class ConfigsManager extends Component
             || $reseller->panel_id == $this->selectedPanelId
             || $reseller->primary_panel_id == $this->selectedPanelId;
 
-        if (!$hasAccess) {
+        if (! $hasAccess) {
             session()->flash('error', 'You do not have access to the selected panel.');
+
             return;
         }
 
@@ -301,12 +350,13 @@ class ConfigsManager extends Component
         // Cast expiresDays to int to prevent TypeError in Carbon::addDays()
         // Livewire form inputs are strings even with 'integer' validation
         // Use is_numeric guard for additional safety before casting
-        if (!is_numeric($this->expiresDays)) {
+        if (! is_numeric($this->expiresDays)) {
             Log::warning('ConfigsManager::createConfig - expiresDays is not numeric', [
                 'expiresDays' => $this->expiresDays,
                 'type' => gettype($this->expiresDays),
             ]);
             session()->flash('error', 'مدت زمان انقضا باید یک عدد معتبر باشد.');
+
             return;
         }
         $expiresDaysInt = (int) $this->expiresDays;
@@ -315,6 +365,7 @@ class ConfigsManager extends Component
                 'expiresDaysInt' => $expiresDaysInt,
             ]);
             session()->flash('error', 'مدت زمان انقضا باید حداقل ۱ روز باشد.');
+
             return;
         }
 
@@ -327,8 +378,14 @@ class ConfigsManager extends Component
         $nodeIds = array_map('intval', (array) $this->selectedNodeIds);
         $maxClients = (int) ($this->maxClients ?: 1);
 
+        // Capture L2TP/Cisco settings for Eylandoo panels
+        $enableL2tp = (bool) $this->enableL2tp;
+        $l2tpPassword = $this->l2tpPassword ?: '';
+        $enableCisco = (bool) $this->enableCisco;
+        $ciscoPassword = $this->ciscoPassword ?: '';
+
         try {
-            DB::transaction(function () use ($reseller, $panel, $trafficLimitBytes, $expiresAt, $nodeIds, $maxClients, $expiresDaysInt) {
+            DB::transaction(function () use ($reseller, $panel, $trafficLimitBytes, $expiresAt, $nodeIds, $maxClients, $expiresDaysInt, $enableL2tp, $l2tpPassword, $enableCisco, $ciscoPassword) {
                 $provisioner = new ResellerProvisioner;
                 $user = Auth::user();
 
@@ -347,7 +404,7 @@ class ConfigsManager extends Component
 
                 // Use usernamePrefix to generate panel username if provided
                 if ($this->usernamePrefix) {
-                    $usernameGenerator = new \App\Services\UsernameGenerator();
+                    $usernameGenerator = new \App\Services\UsernameGenerator;
                     $sanitizedPrefix = $usernameGenerator->sanitizePrefix($this->usernamePrefix);
                     $generatedData = $usernameGenerator->generatePanelUsername($sanitizedPrefix);
                     $panelUsername = $generatedData['panel_username'];
@@ -360,8 +417,8 @@ class ConfigsManager extends Component
                 if ($customName) {
                     $username = $customName;
                     // If custom name is used, derive display prefix from it
-                    if (!$storedUsernamePrefix) {
-                        $usernameGenerator = new \App\Services\UsernameGenerator();
+                    if (! $storedUsernamePrefix) {
+                        $usernameGenerator = new \App\Services\UsernameGenerator;
                         $storedUsernamePrefix = $usernameGenerator->extractDisplayPrefix($customName);
                     }
                 } elseif ($panelUsername) {
@@ -376,10 +433,10 @@ class ConfigsManager extends Component
                     $nameData = $generator->generate($reseller, $panel, $reseller->type, $generatorOptions);
                     $username = $nameData['name'];
                     $nameVersion = $nameData['version'];
-                    
+
                     // Extract display prefix from generated name if not already set
-                    if (!$storedUsernamePrefix) {
-                        $usernameGenerator = new \App\Services\UsernameGenerator();
+                    if (! $storedUsernamePrefix) {
+                        $usernameGenerator = new \App\Services\UsernameGenerator;
                         $storedUsernamePrefix = $usernameGenerator->extractDisplayPrefix($username);
                     }
                 }
@@ -403,6 +460,8 @@ class ConfigsManager extends Component
                     'meta' => [
                         'node_ids' => $nodeIds,
                         'max_clients' => $maxClients,
+                        'enable_l2tp' => $enableL2tp,
+                        'enable_cisco' => $enableCisco,
                     ],
                 ]);
 
@@ -418,6 +477,10 @@ class ConfigsManager extends Component
                     'connections' => 1,
                     'max_clients' => $maxClients,
                     'nodes' => $nodeIds,
+                    'enable_l2tp' => $enableL2tp,
+                    'l2tp_password' => $l2tpPassword,
+                    'enable_cisco' => $enableCisco,
+                    'cisco_password' => $ciscoPassword,
                 ]);
 
                 if ($result) {
@@ -445,8 +508,8 @@ class ConfigsManager extends Component
             // Trigger immediate wallet charging after config creation
             $this->triggerImmediateWalletCharge('create_config');
         } catch (\Exception $e) {
-            Log::error('Config creation failed: ' . $e->getMessage());
-            session()->flash('error', 'خطا در ایجاد کانفیگ: ' . $e->getMessage());
+            Log::error('Config creation failed: '.$e->getMessage());
+            session()->flash('error', 'خطا در ایجاد کانفیگ: '.$e->getMessage());
         }
     }
 
@@ -458,8 +521,9 @@ class ConfigsManager extends Component
         ]);
 
         $config = ResellerConfig::find($this->editingConfigId);
-        if (!$config || $config->reseller_id !== $this->reseller->id) {
+        if (! $config || $config->reseller_id !== $this->reseller->id) {
             session()->flash('error', 'کانفیگ یافت نشد.');
+
             return;
         }
 
@@ -467,19 +531,30 @@ class ConfigsManager extends Component
         $expiresAt = \Carbon\Carbon::parse($this->editExpiresAt)->startOfDay();
         $maxClients = (int) ($this->editMaxClients ?: 1);
 
+        // Capture L2TP/Cisco settings
+        $enableL2tp = (bool) $this->editEnableL2tp;
+        $l2tpPassword = $this->editL2tpPassword ?: '';
+        $enableCisco = (bool) $this->editEnableCisco;
+        $ciscoPassword = $this->editCiscoPassword ?: '';
+
         if ($trafficLimitBytes < $config->usage_bytes) {
             session()->flash('error', 'Traffic limit cannot be set below current usage.');
+
             return;
         }
 
         try {
-            DB::transaction(function () use ($config, $trafficLimitBytes, $expiresAt, $maxClients) {
+            DB::transaction(function () use ($config, $trafficLimitBytes, $expiresAt, $maxClients, $enableL2tp, $l2tpPassword, $enableCisco, $ciscoPassword) {
                 $oldTrafficLimit = $config->traffic_limit_bytes;
                 $oldExpiresAt = $config->expires_at;
 
                 $meta = $config->meta ?? [];
                 $oldMaxClients = $meta['max_clients'] ?? 1;
+                $oldEnableL2tp = $meta['enable_l2tp'] ?? false;
+                $oldEnableCisco = $meta['enable_cisco'] ?? false;
                 $meta['max_clients'] = $maxClients;
+                $meta['enable_l2tp'] = $enableL2tp;
+                $meta['enable_cisco'] = $enableCisco;
 
                 $config->update([
                     'traffic_limit_bytes' => $trafficLimitBytes,
@@ -495,15 +570,25 @@ class ConfigsManager extends Component
                         $panelType = strtolower(trim($panel->panel_type ?? ''));
 
                         if ($panelType === 'eylandoo') {
+                            $updatePayload = [
+                                'data_limit' => $trafficLimitBytes,
+                                'expire' => $expiresAt->timestamp,
+                                'max_clients' => $maxClients,
+                                'enable_l2tp' => $enableL2tp,
+                                'enable_cisco' => $enableCisco,
+                            ];
+                            // Only include password if provided (non-empty)
+                            if (! empty($l2tpPassword)) {
+                                $updatePayload['l2tp_password'] = $l2tpPassword;
+                            }
+                            if (! empty($ciscoPassword)) {
+                                $updatePayload['cisco_password'] = $ciscoPassword;
+                            }
                             $provisioner->updateUser(
                                 $panel->panel_type,
                                 $panel->getCredentials(),
                                 $config->panel_user_id,
-                                [
-                                    'data_limit' => $trafficLimitBytes,
-                                    'expire' => $expiresAt->timestamp,
-                                    'max_clients' => $maxClients,
-                                ]
+                                $updatePayload
                             );
                         } else {
                             $provisioner->updateUserLimits(
@@ -528,6 +613,10 @@ class ConfigsManager extends Component
                         'new_expires_at' => $expiresAt->toDateTimeString(),
                         'old_max_clients' => $oldMaxClients,
                         'new_max_clients' => $maxClients,
+                        'old_enable_l2tp' => $oldEnableL2tp,
+                        'new_enable_l2tp' => $enableL2tp,
+                        'old_enable_cisco' => $oldEnableCisco,
+                        'new_enable_cisco' => $enableCisco,
                     ],
                 ]);
 
@@ -540,16 +629,17 @@ class ConfigsManager extends Component
             // Trigger immediate wallet charging after config edit
             $this->triggerImmediateWalletCharge('edit_config');
         } catch (\Exception $e) {
-            Log::error('Config update failed: ' . $e->getMessage());
-            session()->flash('error', 'خطا در بروزرسانی کانفیگ: ' . $e->getMessage());
+            Log::error('Config update failed: '.$e->getMessage());
+            session()->flash('error', 'خطا در بروزرسانی کانفیگ: '.$e->getMessage());
         }
     }
 
     public function resetTraffic($configId)
     {
         $config = ResellerConfig::find($configId);
-        if (!$config || $config->reseller_id !== $this->reseller->id) {
+        if (! $config || $config->reseller_id !== $this->reseller->id) {
             session()->flash('error', 'کانفیگ یافت نشد.');
+
             return;
         }
 
@@ -620,16 +710,17 @@ class ConfigsManager extends Component
                 $this->reseller->refresh();
             }
         } catch (\Exception $e) {
-            Log::error('Traffic reset failed: ' . $e->getMessage());
-            session()->flash('error', 'خطا در ریست کردن ترافیک: ' . $e->getMessage());
+            Log::error('Traffic reset failed: '.$e->getMessage());
+            session()->flash('error', 'خطا در ریست کردن ترافیک: '.$e->getMessage());
         }
     }
 
     public function toggleStatus($configId)
     {
         $config = ResellerConfig::find($configId);
-        if (!$config || $config->reseller_id !== $this->reseller->id) {
+        if (! $config || $config->reseller_id !== $this->reseller->id) {
             session()->flash('error', 'کانفیگ یافت نشد.');
+
             return;
         }
 
@@ -667,7 +758,7 @@ class ConfigsManager extends Component
 
             $this->loadStats();
         } catch (\Exception $e) {
-            Log::error('Config toggle failed: ' . $e->getMessage());
+            Log::error('Config toggle failed: '.$e->getMessage());
             session()->flash('error', 'خطا در تغییر وضعیت کانفیگ.');
         }
     }
@@ -675,8 +766,9 @@ class ConfigsManager extends Component
     public function deleteConfig($configId)
     {
         $config = ResellerConfig::find($configId);
-        if (!$config || $config->reseller_id !== $this->reseller->id) {
+        if (! $config || $config->reseller_id !== $this->reseller->id) {
             session()->flash('error', 'کانفیگ یافت نشد.');
+
             return;
         }
 
@@ -723,7 +815,7 @@ class ConfigsManager extends Component
                 $this->reseller->refresh();
             }
         } catch (\Exception $e) {
-            Log::error('Config deletion failed: ' . $e->getMessage());
+            Log::error('Config deletion failed: '.$e->getMessage());
             session()->flash('error', 'خطا در حذف کانفیگ.');
         }
     }
@@ -740,24 +832,26 @@ class ConfigsManager extends Component
 
     public function getPanelsProperty()
     {
-        if (!$this->reseller) {
+        if (! $this->reseller) {
             return collect();
         }
+
         return $this->reseller->panels()->where('is_active', true)->get();
     }
 
     public function getPanelsForJsProperty()
     {
-        if (!$this->reseller) {
+        if (! $this->reseller) {
             return [];
         }
         $panelDataService = new PanelDataService;
+
         return $panelDataService->getPanelsForReseller($this->reseller);
     }
 
     public function render()
     {
-        if (!$this->reseller || !$this->reseller->supportsConfigManagement()) {
+        if (! $this->reseller || ! $this->reseller->supportsConfigManagement()) {
             return view('livewire.reseller.configs-manager', [
                 'configs' => collect(),
                 'unsupported' => true,
@@ -767,15 +861,15 @@ class ConfigsManager extends Component
         $query = $this->reseller->configs()
             ->when($this->search, function ($q) {
                 $q->where(function ($query) {
-                    $query->where('external_username', 'like', '%' . $this->search . '%')
-                        ->orWhere('username_prefix', 'like', '%' . $this->search . '%')
-                        ->orWhere('comment', 'like', '%' . $this->search . '%');
+                    $query->where('external_username', 'like', '%'.$this->search.'%')
+                        ->orWhere('username_prefix', 'like', '%'.$this->search.'%')
+                        ->orWhere('comment', 'like', '%'.$this->search.'%');
                 });
             })
             ->when($this->statusFilter !== 'all', function ($q) {
                 if ($this->statusFilter === 'expiring') {
                     $q->where('status', 'active')
-                      ->where('expires_at', '<=', now()->addDays(7));
+                        ->where('expires_at', '<=', now()->addDays(7));
                 } else {
                     $q->where('status', $this->statusFilter);
                 }
