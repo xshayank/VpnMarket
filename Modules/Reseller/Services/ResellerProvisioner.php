@@ -415,15 +415,18 @@ class ResellerProvisioner
      */
     protected function provisionEylandoo(array $credentials, Plan $plan, string $username, array $options): ?array
     {
+        $correlationId = uniqid('provision_eylandoo_', true);
+
         // Validate credentials before attempting API calls
         if (empty($credentials['url']) || empty($credentials['api_token'])) {
             Log::warning('Eylandoo provision: Missing credentials', [
+                'correlation_id' => $correlationId,
                 'has_url' => ! empty($credentials['url']),
                 'has_api_token' => ! empty($credentials['api_token']),
                 'username' => $username,
             ]);
 
-            return null;
+            throw new \RuntimeException('اعتبارنامه پنل Eylandoo تنظیم نشده است.');
         }
 
         $nodeHostname = $credentials['extra']['node_hostname'] ?? $credentials['node_hostname'] ?? '';
@@ -434,6 +437,18 @@ class ResellerProvisioner
                 $credentials['api_token'],
                 $nodeHostname
             );
+
+            // Preflight health check
+            $healthCheck = $service->checkHealth();
+            if (! $healthCheck['online']) {
+                Log::warning('Eylandoo provision: Panel offline', [
+                    'correlation_id' => $correlationId,
+                    'username' => $username,
+                    'health_message' => $healthCheck['message'],
+                ]);
+
+                throw new \RuntimeException('پنل Eylandoo در دسترس نیست. لطفاً بعداً تلاش کنید.');
+            }
 
             $expiresAt = $options['expires_at'] ?? now()->addDays($plan->duration_days);
             $trafficLimit = $options['traffic_limit_bytes'] ?? ($plan->volume_gb * 1024 * 1024 * 1024);
@@ -464,6 +479,7 @@ class ResellerProvisioner
             if (! empty($nodes) && is_array($nodes)) {
                 $userData['nodes'] = $nodes;
                 Log::debug('Eylandoo provision: Including nodes in user data', [
+                    'correlation_id' => $correlationId,
                     'username' => $username,
                     'nodes' => $nodes,
                     'nodes_count' => count($nodes),
@@ -488,7 +504,23 @@ class ResellerProvisioner
 
             $result = $service->createUser($userData);
 
-            Log::info('Eylandoo provision result:', ['result' => $result, 'username' => $username]);
+            Log::info('Eylandoo provision result', [
+                'correlation_id' => $correlationId,
+                'result' => $result,
+                'username' => $username,
+            ]);
+
+            // Check for explicit failure with error message
+            if ($result && is_array($result) && isset($result['success']) && $result['success'] === false) {
+                $errorMessage = $result['error'] ?? 'خطای ناشناخته در ایجاد کانفیگ';
+                Log::warning('Eylandoo provision failed with error', [
+                    'correlation_id' => $correlationId,
+                    'username' => $username,
+                    'error' => $errorMessage,
+                ]);
+
+                throw new \RuntimeException($errorMessage);
+            }
 
             // Detect success: either result.success === true or created_users contains username
             $success = false;
@@ -513,15 +545,24 @@ class ResellerProvisioner
 
                 // If no subscription URL in create response, fetch from dedicated subscription endpoint
                 if (empty($subscriptionUrl)) {
-                    Log::info("No subscription URL in create response for {$username}, fetching from /sub endpoint");
+                    Log::info("No subscription URL in create response for {$username}, fetching from /sub endpoint", [
+                        'correlation_id' => $correlationId,
+                    ]);
 
                     $subResponse = $service->getUserSubscription($username);
                     if ($subResponse) {
-                        Log::info('Eylandoo subscription endpoint response:', ['subResponse' => $subResponse]);
+                        Log::info('Eylandoo subscription endpoint response', [
+                            'correlation_id' => $correlationId,
+                            'subResponse' => $subResponse,
+                        ]);
 
                         // Extract subscription URL from /sub response
                         $subscriptionUrl = $service->extractSubscriptionUrlFromSub($subResponse);
-                        Log::info('Extracted subscription URL:', ['username' => $username, 'subscription_url' => $subscriptionUrl]);
+                        Log::info('Extracted subscription URL', [
+                            'correlation_id' => $correlationId,
+                            'username' => $username,
+                            'subscription_url' => $subscriptionUrl,
+                        ]);
                     }
                 }
 
@@ -530,17 +571,23 @@ class ResellerProvisioner
                     'subscription_url' => $subscriptionUrl,
                     'panel_type' => 'eylandoo',
                     'panel_user_id' => $username,
+                    'correlation_id' => $correlationId,
                 ];
             }
 
-            return null;
+            // Provision failed without explicit error
+            throw new \RuntimeException('ایجاد کانفیگ روی پنل ناموفق بود.');
+        } catch (\RuntimeException $e) {
+            // Re-throw runtime exceptions as they already have user-friendly messages
+            throw $e;
         } catch (\Exception $e) {
             Log::error('Eylandoo provision exception', [
+                'correlation_id' => $correlationId,
                 'username' => $username,
                 'error' => $e->getMessage(),
             ]);
 
-            return null;
+            throw new \RuntimeException('خطا در ایجاد کانفیگ: '.$e->getMessage());
         }
     }
 

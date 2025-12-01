@@ -298,12 +298,17 @@ class ConfigsManager extends Component
 
     public function createConfig()
     {
+        $correlationId = uniqid('create_config_', true);
+
         // Debug logging for input values to aid diagnostics
         Log::debug('ConfigsManager::createConfig - Input values', [
+            'correlation_id' => $correlationId,
             'expiresDays' => $this->expiresDays,
             'expiresDays_type' => gettype($this->expiresDays),
             'trafficLimitGb' => $this->trafficLimitGb,
             'selectedPanelId' => $this->selectedPanelId,
+            'reseller_id' => $this->reseller?->id,
+            'user_id' => Auth::id(),
         ]);
 
         // Validate all required fields plus usernamePrefix with custom error messages
@@ -322,6 +327,16 @@ class ConfigsManager extends Component
         ]);
 
         $reseller = $this->reseller;
+
+        if (! $reseller) {
+            Log::error('ConfigsManager::createConfig - No reseller found', [
+                'correlation_id' => $correlationId,
+                'user_id' => Auth::id(),
+            ]);
+            session()->flash('error', 'حساب ریسلر یافت نشد.');
+
+            return;
+        }
 
         // Check config_limit enforcement
         if ($reseller->config_limit !== null && $reseller->config_limit > 0) {
@@ -352,6 +367,7 @@ class ConfigsManager extends Component
         // Use is_numeric guard for additional safety before casting
         if (! is_numeric($this->expiresDays)) {
             Log::warning('ConfigsManager::createConfig - expiresDays is not numeric', [
+                'correlation_id' => $correlationId,
                 'expiresDays' => $this->expiresDays,
                 'type' => gettype($this->expiresDays),
             ]);
@@ -362,6 +378,7 @@ class ConfigsManager extends Component
         $expiresDaysInt = (int) $this->expiresDays;
         if ($expiresDaysInt < 1) {
             Log::warning('ConfigsManager::createConfig - expiresDaysInt is less than 1', [
+                'correlation_id' => $correlationId,
                 'expiresDaysInt' => $expiresDaysInt,
             ]);
             session()->flash('error', 'مدت زمان انقضا باید حداقل ۱ روز باشد.');
@@ -371,6 +388,7 @@ class ConfigsManager extends Component
 
         // Log the computed expiry path (using days)
         Log::debug('ConfigsManager::createConfig - Using days-based expiry', [
+            'correlation_id' => $correlationId,
             'expiresDaysInt' => $expiresDaysInt,
         ]);
 
@@ -385,7 +403,7 @@ class ConfigsManager extends Component
         $ciscoPassword = $this->ciscoPassword ?: '';
 
         try {
-            DB::transaction(function () use ($reseller, $panel, $trafficLimitBytes, $expiresAt, $nodeIds, $maxClients, $expiresDaysInt, $enableL2tp, $l2tpPassword, $enableCisco, $ciscoPassword) {
+            DB::transaction(function () use ($reseller, $panel, $trafficLimitBytes, $expiresAt, $nodeIds, $maxClients, $expiresDaysInt, $enableL2tp, $l2tpPassword, $enableCisco, $ciscoPassword, $correlationId) {
                 $provisioner = new ResellerProvisioner;
                 $user = Auth::user();
 
@@ -462,6 +480,7 @@ class ConfigsManager extends Component
                         'max_clients' => $maxClients,
                         'enable_l2tp' => $enableL2tp,
                         'enable_cisco' => $enableCisco,
+                        'correlation_id' => $correlationId,
                     ],
                 ]);
 
@@ -470,35 +489,41 @@ class ConfigsManager extends Component
                 $plan->duration_days = $expiresDaysInt;
                 $plan->marzneshin_service_ids = (array) $this->selectedServiceIds;
 
-                $result = $provisioner->provisionUser($panel, $plan, $username, [
-                    'traffic_limit_bytes' => $trafficLimitBytes,
-                    'expires_at' => $expiresAt,
-                    'service_ids' => $plan->marzneshin_service_ids,
-                    'connections' => 1,
-                    'max_clients' => $maxClients,
-                    'nodes' => $nodeIds,
-                    'enable_l2tp' => $enableL2tp,
-                    'l2tp_password' => $l2tpPassword,
-                    'enable_cisco' => $enableCisco,
-                    'cisco_password' => $ciscoPassword,
-                ]);
-
-                if ($result) {
-                    $config->update([
-                        'panel_user_id' => $result['panel_user_id'],
-                        'subscription_url' => $result['subscription_url'] ?? null,
+                try {
+                    $result = $provisioner->provisionUser($panel, $plan, $username, [
+                        'traffic_limit_bytes' => $trafficLimitBytes,
+                        'expires_at' => $expiresAt,
+                        'service_ids' => $plan->marzneshin_service_ids,
+                        'connections' => 1,
+                        'max_clients' => $maxClients,
+                        'nodes' => $nodeIds,
+                        'enable_l2tp' => $enableL2tp,
+                        'l2tp_password' => $l2tpPassword,
+                        'enable_cisco' => $enableCisco,
+                        'cisco_password' => $ciscoPassword,
                     ]);
 
-                    ResellerConfigEvent::create([
-                        'reseller_config_id' => $config->id,
-                        'type' => 'created',
-                        'meta' => $result,
-                    ]);
+                    if ($result) {
+                        $config->update([
+                            'panel_user_id' => $result['panel_user_id'],
+                            'subscription_url' => $result['subscription_url'] ?? null,
+                        ]);
 
-                    session()->flash('success', 'کانفیگ با موفقیت ایجاد شد.');
-                } else {
+                        ResellerConfigEvent::create([
+                            'reseller_config_id' => $config->id,
+                            'type' => 'created',
+                            'meta' => array_merge($result, ['correlation_id' => $correlationId]),
+                        ]);
+
+                        session()->flash('success', 'کانفیگ با موفقیت ایجاد شد.');
+                    } else {
+                        $config->delete();
+                        throw new \RuntimeException('ایجاد کانفیگ روی پنل ناموفق بود.');
+                    }
+                } catch (\RuntimeException $e) {
+                    // Delete the local config record since panel provisioning failed
                     $config->delete();
-                    throw new \Exception('Failed to provision config on the panel.');
+                    throw $e;
                 }
             });
 
@@ -507,8 +532,24 @@ class ConfigsManager extends Component
 
             // Trigger immediate wallet charging after config creation
             $this->triggerImmediateWalletCharge('create_config');
+        } catch (\RuntimeException $e) {
+            // RuntimeException contains user-friendly messages from provisioner
+            Log::error('Config creation failed (RuntimeException)', [
+                'correlation_id' => $correlationId,
+                'error' => $e->getMessage(),
+                'reseller_id' => $reseller->id,
+                'user_id' => Auth::id(),
+                'panel_id' => $panel->id ?? null,
+            ]);
+            session()->flash('error', $e->getMessage());
         } catch (\Exception $e) {
-            Log::error('Config creation failed: '.$e->getMessage());
+            Log::error('Config creation failed (Exception)', [
+                'correlation_id' => $correlationId,
+                'error' => $e->getMessage(),
+                'reseller_id' => $reseller->id,
+                'user_id' => Auth::id(),
+                'panel_id' => $panel->id ?? null,
+            ]);
             session()->flash('error', 'خطا در ایجاد کانفیگ: '.$e->getMessage());
         }
     }

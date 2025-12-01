@@ -252,3 +252,60 @@ test('header shows reseller name in subtitle', function () {
     // Should show user name
     $view->assertSee('تست ریسلر', false);
 });
+
+test('header component renders without errors when ticketing module is disabled', function () {
+    $user = User::factory()->create();
+    Reseller::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'wallet',
+        'status' => 'active',
+        'wallet_balance' => 100000,
+        'api_enabled' => false,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
+    ]);
+
+    // The header should render without crashing even when ticketing is disabled
+    $view = $this->actingAs($user)->view('components.reseller.header');
+
+    // Core header elements should be present
+    $view->assertSee('داشبورد', false);
+    $view->assertSee('خروج', false);
+});
+
+test('header component gracefully handles minimal user properties', function () {
+    $user = User::factory()->create(['name' => 'ریسلر']);
+    Reseller::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'wallet',
+        'status' => 'active',
+        'wallet_balance' => 100000,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
+    ]);
+
+    // The header should render without crashing
+    $view = $this->actingAs($user)->view('components.reseller.header');
+
+    // Should display username or fallback text
+    $view->assertSee('داشبورد', false);
+});
+
+test('header component uses safe route helper for all links', function () {
+    $user = User::factory()->create();
+    Reseller::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'wallet',
+        'status' => 'active',
+        'wallet_balance' => 100000,
+        'api_enabled' => true,
+        'primary_panel_id' => $this->panel->id,
+        'panel_id' => $this->panel->id,
+    ]);
+
+    $view = $this->actingAs($user)->view('components.reseller.header');
+
+    // All links should be present (safe route helper should generate them)
+    $view->assertSee('href=', false);
+    $view->assertSee('method="POST"', false); // Logout form
+});

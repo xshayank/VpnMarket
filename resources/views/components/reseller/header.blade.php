@@ -4,26 +4,45 @@
     use Illuminate\Support\Facades\Storage;
     use App\Models\Setting;
     use Illuminate\Support\Facades\Cache;
+    use App\Helpers\RouteHelper;
 
     // Only fetch site_logo setting, with caching for performance
-    $logoPath = Cache::remember('site_logo', 3600, function () {
-        return Setting::where('key', 'site_logo')->value('value');
-    });
+    $logoPath = null;
+    try {
+        $logoPath = Cache::remember('site_logo', 3600, function () {
+            return Setting::where('key', 'site_logo')->value('value');
+        });
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::debug('Failed to fetch site_logo', ['error' => $e->getMessage()]);
+    }
+    
     $reseller = auth()->user()->reseller ?? null;
+    
+    // Pre-compute safe route URLs using helper class
+    $dashboardUrl = RouteHelper::safeRoute('reseller.dashboard');
+    $walletChargeUrl = RouteHelper::safeRoute('wallet.charge.form');
+    $ticketsUrl = RouteHelper::moduleEnabled('Ticketing') ? RouteHelper::safeRoute('reseller.tickets.index') : null;
+    $apiKeysUrl = ($reseller?->api_enabled ?? false) ? RouteHelper::safeRoute('reseller.api-keys.index') : null;
+    $profileUrl = RouteHelper::safeRoute('profile.edit');
+    $logoutUrl = RouteHelper::safeRoute('logout');
     
     // Derive page title from route if not provided
     if (!$title) {
-        if (request()->routeIs('reseller.dashboard')) {
-            $title = __('کاربران');
-        } elseif (request()->routeIs('reseller.tickets.*')) {
-            $title = __('تیکت‌ها');
-        } elseif (request()->routeIs('reseller.api-keys.*')) {
-            $title = __('کلیدهای API');
-        } elseif (request()->routeIs('reseller.plans.*')) {
-            $title = __('پلن‌ها');
-        } elseif (request()->routeIs('reseller.configs.*')) {
-            $title = __('کانفیگ‌ها');
-        } else {
+        try {
+            if (request()->routeIs('reseller.dashboard')) {
+                $title = __('کاربران');
+            } elseif (request()->routeIs('reseller.tickets.*')) {
+                $title = __('تیکت‌ها');
+            } elseif (request()->routeIs('reseller.api-keys.*')) {
+                $title = __('کلیدهای API');
+            } elseif (request()->routeIs('reseller.plans.*')) {
+                $title = __('پلن‌ها');
+            } elseif (request()->routeIs('reseller.configs.*')) {
+                $title = __('کانفیگ‌ها');
+            } else {
+                $title = __('داشبورد ریسلر');
+            }
+        } catch (\Exception $e) {
             $title = __('داشبورد ریسلر');
         }
     }
@@ -42,7 +61,7 @@
                     {{-- Left Section: Logo + Title --}}
                     <div class="flex items-center gap-3 min-w-0 flex-shrink-0">
                         {{-- Logo --}}
-                        <a href="{{ route('reseller.dashboard') }}" class="flex-shrink-0" aria-label="داشبورد">
+                        <a href="{{ $dashboardUrl ?? '#' }}" class="flex-shrink-0" aria-label="داشبورد">
                             <img 
                                 src="{{ $logoPath ? Storage::url($logoPath) : asset('images/default-logo.png') }}"
                                 alt="Logo"
@@ -82,8 +101,9 @@
                         @endif
 
                         {{-- Dashboard Link --}}
+                        @if($dashboardUrl)
                         <a 
-                            href="{{ route('reseller.dashboard') }}"
+                            href="{{ $dashboardUrl }}"
                             class="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {{ request()->routeIs('reseller.dashboard') ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' : '' }}"
                             title="داشبورد"
                             aria-label="داشبورد"
@@ -92,10 +112,12 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
                             </svg>
                         </a>
+                        @endif
 
                         {{-- Wallet --}}
+                        @if($walletChargeUrl)
                         <a 
-                            href="{{ route('wallet.charge.form') }}"
+                            href="{{ $walletChargeUrl }}"
                             class="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                             title="کیف پول"
                             aria-label="شارژ کیف پول"
@@ -104,11 +126,12 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
                             </svg>
                         </a>
+                        @endif
 
-                        {{-- Tickets (if Ticketing module enabled) --}}
-                        @if(\Nwidart\Modules\Facades\Module::isEnabled('Ticketing'))
+                        {{-- Tickets (if Ticketing module enabled and route available) --}}
+                        @if($ticketsUrl)
                             <a 
-                                href="{{ route('reseller.tickets.index') }}"
+                                href="{{ $ticketsUrl }}"
                                 class="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {{ request()->routeIs('reseller.tickets.*') ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' : '' }}"
                                 title="تیکت‌ها"
                                 aria-label="تیکت‌های پشتیبانی"
@@ -119,10 +142,10 @@
                             </a>
                         @endif
 
-                        {{-- API Keys (if enabled) --}}
-                        @if($reseller->api_enabled ?? false)
+                        {{-- API Keys (if enabled and route available) --}}
+                        @if($apiKeysUrl)
                             <a 
-                                href="{{ route('reseller.api-keys.index') }}"
+                                href="{{ $apiKeysUrl }}"
                                 class="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {{ request()->routeIs('reseller.api-keys.*') ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' : '' }}"
                                 title="کلیدهای API"
                                 aria-label="مدیریت کلیدهای API"
@@ -167,7 +190,7 @@
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                     </svg>
-                                    <span class="hidden lg:inline text-sm font-medium text-gray-700 dark:text-gray-200">{{ Auth::user()->name }}</span>
+                                    <span class="hidden lg:inline text-sm font-medium text-gray-700 dark:text-gray-200">{{ Auth::user()->name ?? 'کاربر' }}</span>
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                                     </svg>
@@ -175,7 +198,8 @@
                             </x-slot>
 
                             <x-slot name="content">
-                                <x-dropdown-link :href="route('profile.edit')">
+                                @if($profileUrl)
+                                <x-dropdown-link :href="$profileUrl">
                                     <span class="flex items-center gap-2">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
@@ -184,10 +208,12 @@
                                         تنظیمات
                                     </span>
                                 </x-dropdown-link>
+                                @endif
 
-                                <form method="POST" action="{{ route('logout') }}">
+                                @if($logoutUrl)
+                                <form method="POST" action="{{ $logoutUrl }}">
                                     @csrf
-                                    <x-dropdown-link :href="route('logout')"
+                                    <x-dropdown-link :href="$logoutUrl"
                                                      onclick="event.preventDefault(); this.closest('form').submit();">
                                         <span class="flex items-center gap-2 text-red-600 dark:text-red-400">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -197,6 +223,7 @@
                                         </span>
                                     </x-dropdown-link>
                                 </form>
+                                @endif
                             </x-slot>
                         </x-dropdown>
                     </div>
@@ -243,13 +270,14 @@
                 <div class="px-3 py-3 space-y-1">
                     {{-- User Info --}}
                     <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 mb-2">
-                        <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ Auth::user()->name }}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">{{ Auth::user()->email }}</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ Auth::user()->name ?? 'کاربر' }}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">{{ Auth::user()->email ?? '' }}</p>
                     </div>
 
                     {{-- Dashboard --}}
+                    @if($dashboardUrl)
                     <a 
-                        href="{{ route('reseller.dashboard') }}"
+                        href="{{ $dashboardUrl }}"
                         class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors {{ request()->routeIs('reseller.dashboard') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -257,10 +285,12 @@
                         </svg>
                         داشبورد
                     </a>
+                    @endif
 
                     {{-- Wallet --}}
+                    @if($walletChargeUrl)
                     <a 
-                        href="{{ route('wallet.charge.form') }}"
+                        href="{{ $walletChargeUrl }}"
                         class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -268,11 +298,12 @@
                         </svg>
                         کیف پول
                     </a>
+                    @endif
 
                     {{-- Tickets --}}
-                    @if(\Nwidart\Modules\Facades\Module::isEnabled('Ticketing'))
+                    @if($ticketsUrl)
                         <a 
-                            href="{{ route('reseller.tickets.index') }}"
+                            href="{{ $ticketsUrl }}"
                             class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors {{ request()->routeIs('reseller.tickets.*') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
                         >
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -283,9 +314,9 @@
                     @endif
 
                     {{-- API Keys --}}
-                    @if($reseller->api_enabled ?? false)
+                    @if($apiKeysUrl)
                         <a 
-                            href="{{ route('reseller.api-keys.index') }}"
+                            href="{{ $apiKeysUrl }}"
                             class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors {{ request()->routeIs('reseller.api-keys.*') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
                         >
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -299,8 +330,9 @@
                     <div class="border-t border-gray-200 dark:border-gray-700 my-2"></div>
 
                     {{-- Settings --}}
+                    @if($profileUrl)
                     <a 
-                        href="{{ route('profile.edit') }}"
+                        href="{{ $profileUrl }}"
                         class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -309,6 +341,7 @@
                         </svg>
                         تنظیمات
                     </a>
+                    @endif
 
                     {{-- Theme Toggle --}}
                     <button 
@@ -343,7 +376,8 @@
                     @endif
 
                     {{-- Logout --}}
-                    <form method="POST" action="{{ route('logout') }}">
+                    @if($logoutUrl)
+                    <form method="POST" action="{{ $logoutUrl }}">
                         @csrf
                         <button 
                             type="submit"
@@ -355,6 +389,7 @@
                             خروج از حساب
                         </button>
                     </form>
+                    @endif
                 </div>
             </div>
         </header>
