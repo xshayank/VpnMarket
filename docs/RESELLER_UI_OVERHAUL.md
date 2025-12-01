@@ -69,6 +69,38 @@ Both Create and Edit modals feature:
 - Copy subscription link button
 - QR code button (opens QR modal)
 - Form fields for traffic limit, expiry date, and max clients (Eylandoo panels)
+- **Reset Traffic section**: Allows resetting user's traffic usage to zero with confirmation dialog
+
+### 4a. Reset Traffic Feature
+
+The Edit Modal includes a "Reset Traffic" section that allows resellers to reset a user's traffic usage to zero.
+
+#### How It Works:
+1. Click "ریست ترافیک" (Reset Traffic) button in the Edit Modal
+2. A confirmation dialog appears asking for confirmation
+3. On confirm, the system:
+   - Resets usage on the remote panel (Marzban/Marzneshin/Eylandoo) if available
+   - Sets local `usage_bytes` to 0
+   - Creates an audit log entry (`ResellerConfigEvent` with type `traffic_reset`)
+   - Shows success/error toast message
+4. The usage figures refresh without page reload
+
+#### Security:
+- Resellers can only reset traffic for their own configs (ownership verified by `reseller_id`)
+- Audit log entry includes: user ID, old usage bytes, panel reset success status, timestamp
+
+#### Audit Log Entry Example:
+```json
+{
+    "reseller_config_id": 123,
+    "type": "traffic_reset",
+    "meta": {
+        "user_id": 1,
+        "old_usage_bytes": 5368709120,
+        "panel_reset_success": true,
+        "reset_at": "2025-12-01T10:30:00"
+    }
+}
 
 ### 4. Username Display Rule
 
@@ -162,6 +194,7 @@ All buttons are wired to these Livewire methods:
 - `deleteConfig($configId)` - Remove config
 - `createConfig()` - Form submission for create
 - `updateConfig()` - Form submission for edit
+- `resetTraffic($configId)` - Reset user's traffic usage to zero
 
 ### Progress Bar Component
 
@@ -215,8 +248,21 @@ The UI uses Tailwind CSS with:
 Tests are available in:
 - `tests/Feature/ResellerConfigsManagerTest.php` - Basic component tests
 - `tests/Feature/ResellerConfigsManagerButtonsTest.php` - Comprehensive button/action tests
+- `tests/Feature/ResellerConfigsManagerResetTrafficTest.php` - Reset Traffic feature tests
 
 Run tests with:
 ```bash
 ./vendor/bin/pest tests/Feature/ResellerConfigsManager*
 ```
+
+## Unified Dashboard Style
+
+As of the UI/UX enhancement update, the main user dashboard (`resources/views/dashboard.blade.php`) has been updated to use the same Marzban-style gradient cards as the reseller dashboard:
+
+### Dashboard Stats Cards
+- **موجودی (Balance)**: Blue gradient card showing wallet balance
+- **سرویس‌های فعال (Active Services)**: Green gradient card showing active service count
+- **تراکنش‌ها (Transactions)**: Purple gradient card showing transaction count
+- **دعوت‌های موفق (Referrals)**: Amber gradient card showing successful referral count
+
+This provides visual consistency between the reseller and user dashboards, making the overall user experience more cohesive.
