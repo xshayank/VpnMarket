@@ -521,7 +521,8 @@ class ConfigsManager extends Component
                             $panel->getCredentials(),
                             $config->panel_user_id
                         );
-                        $panelResetSuccess = $result['success'] ?? false;
+                        // retryOperation returns array with 'success' key
+                        $panelResetSuccess = is_array($result) && ($result['success'] ?? false);
                     }
                 }
 
