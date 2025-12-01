@@ -78,6 +78,22 @@ class EylandooService
                 $payload['nodes'] = array_map('intval', $userData['nodes']);
             }
 
+            // Add L2TP support if enabled
+            if (isset($userData['enable_l2tp'])) {
+                $payload['enable_l2tp'] = (bool) $userData['enable_l2tp'];
+                if ($payload['enable_l2tp'] && isset($userData['l2tp_password']) && ! empty($userData['l2tp_password'])) {
+                    $payload['l2tp_password'] = (string) $userData['l2tp_password'];
+                }
+            }
+
+            // Add Cisco support if enabled
+            if (isset($userData['enable_cisco'])) {
+                $payload['enable_cisco'] = (bool) $userData['enable_cisco'];
+                if ($payload['enable_cisco'] && isset($userData['cisco_password']) && ! empty($userData['cisco_password'])) {
+                    $payload['cisco_password'] = (string) $userData['cisco_password'];
+                }
+            }
+
             $response = $this->client()->post($this->baseUrl.'/api/v1/users', $payload);
 
             Log::info('Eylandoo Create User Response:', $response->json() ?? ['raw' => $response->body()]);
@@ -374,6 +390,22 @@ class EylandooService
             // Update nodes if provided
             if (isset($userData['nodes']) && is_array($userData['nodes'])) {
                 $payload['nodes'] = array_map('intval', $userData['nodes']);
+            }
+
+            // Update L2TP settings if provided
+            if (array_key_exists('enable_l2tp', $userData)) {
+                $payload['enable_l2tp'] = (bool) $userData['enable_l2tp'];
+                if ($payload['enable_l2tp'] && isset($userData['l2tp_password']) && ! empty($userData['l2tp_password'])) {
+                    $payload['l2tp_password'] = (string) $userData['l2tp_password'];
+                }
+            }
+
+            // Update Cisco settings if provided
+            if (array_key_exists('enable_cisco', $userData)) {
+                $payload['enable_cisco'] = (bool) $userData['enable_cisco'];
+                if ($payload['enable_cisco'] && isset($userData['cisco_password']) && ! empty($userData['cisco_password'])) {
+                    $payload['cisco_password'] = (string) $userData['cisco_password'];
+                }
             }
 
             // Only send request if there's something to update

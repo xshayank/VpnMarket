@@ -1492,3 +1492,329 @@ test('disableUser returns false when toggle fails', function () {
 
     expect($result)->toBeFalse();
 });
+
+// Tests for L2TP and Cisco multi-protocol support
+
+test('createUser includes enable_l2tp when provided', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([
+            'success' => true,
+            'created_users' => ['testuser'],
+            'message' => '1 user(s) created successfully.',
+        ], 201),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        'https://node.example.com'
+    );
+
+    $userData = [
+        'username' => 'testuser',
+        'expire' => 1735689600,
+        'data_limit' => 10737418240,
+        'max_clients' => 2,
+        'enable_l2tp' => true,
+        'l2tp_password' => 'my_l2tp_secret',
+    ];
+
+    $result = $service->createUser($userData);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users'
+            && isset($body['enable_l2tp'])
+            && $body['enable_l2tp'] === true
+            && isset($body['l2tp_password'])
+            && $body['l2tp_password'] === 'my_l2tp_secret';
+    });
+});
+
+test('createUser includes enable_cisco when provided', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([
+            'success' => true,
+            'created_users' => ['testuser'],
+            'message' => '1 user(s) created successfully.',
+        ], 201),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        'https://node.example.com'
+    );
+
+    $userData = [
+        'username' => 'testuser',
+        'expire' => 1735689600,
+        'data_limit' => 10737418240,
+        'max_clients' => 2,
+        'enable_cisco' => true,
+        'cisco_password' => 'my_cisco_secret',
+    ];
+
+    $result = $service->createUser($userData);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users'
+            && isset($body['enable_cisco'])
+            && $body['enable_cisco'] === true
+            && isset($body['cisco_password'])
+            && $body['cisco_password'] === 'my_cisco_secret';
+    });
+});
+
+test('createUser includes both L2TP and Cisco when both enabled', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([
+            'success' => true,
+            'created_users' => ['testuser'],
+            'message' => '1 user(s) created successfully.',
+        ], 201),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        'https://node.example.com'
+    );
+
+    $userData = [
+        'username' => 'testuser',
+        'expire' => 1735689600,
+        'data_limit' => 10737418240,
+        'max_clients' => 2,
+        'enable_l2tp' => true,
+        'l2tp_password' => 'l2tp_pass',
+        'enable_cisco' => true,
+        'cisco_password' => 'cisco_pass',
+    ];
+
+    $result = $service->createUser($userData);
+
+    expect($result)->toBeArray()
+        ->and($result['success'])->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users'
+            && $body['enable_l2tp'] === true
+            && $body['l2tp_password'] === 'l2tp_pass'
+            && $body['enable_cisco'] === true
+            && $body['cisco_password'] === 'cisco_pass';
+    });
+});
+
+test('createUser omits l2tp_password when enable_l2tp is false', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([
+            'success' => true,
+            'created_users' => ['testuser'],
+            'message' => '1 user(s) created successfully.',
+        ], 201),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        'https://node.example.com'
+    );
+
+    $userData = [
+        'username' => 'testuser',
+        'expire' => 1735689600,
+        'data_limit' => 10737418240,
+        'enable_l2tp' => false,
+        'l2tp_password' => 'should_be_ignored',
+    ];
+
+    $result = $service->createUser($userData);
+
+    expect($result)->toBeArray();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users'
+            && $body['enable_l2tp'] === false
+            && ! isset($body['l2tp_password']);
+    });
+});
+
+test('createUser omits cisco_password when enable_cisco is false', function () {
+    Http::fake([
+        '*/api/v1/users' => Http::response([
+            'success' => true,
+            'created_users' => ['testuser'],
+            'message' => '1 user(s) created successfully.',
+        ], 201),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        'https://node.example.com'
+    );
+
+    $userData = [
+        'username' => 'testuser',
+        'expire' => 1735689600,
+        'data_limit' => 10737418240,
+        'enable_cisco' => false,
+        'cisco_password' => 'should_be_ignored',
+    ];
+
+    $result = $service->createUser($userData);
+
+    expect($result)->toBeArray();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users'
+            && $body['enable_cisco'] === false
+            && ! isset($body['cisco_password']);
+    });
+});
+
+test('updateUser includes enable_l2tp when provided', function () {
+    Http::fake([
+        '*/api/v1/users/testuser' => Http::response([
+            'status' => 'success',
+            'message' => 'User updated successfully',
+        ], 200),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $userData = [
+        'enable_l2tp' => true,
+        'l2tp_password' => 'new_l2tp_pass',
+    ];
+
+    $result = $service->updateUser('testuser', $userData);
+
+    expect($result)->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users/testuser'
+            && $request->method() === 'PUT'
+            && $body['enable_l2tp'] === true
+            && $body['l2tp_password'] === 'new_l2tp_pass';
+    });
+});
+
+test('updateUser includes enable_cisco when provided', function () {
+    Http::fake([
+        '*/api/v1/users/testuser' => Http::response([
+            'status' => 'success',
+            'message' => 'User updated successfully',
+        ], 200),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $userData = [
+        'enable_cisco' => true,
+        'cisco_password' => 'new_cisco_pass',
+    ];
+
+    $result = $service->updateUser('testuser', $userData);
+
+    expect($result)->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users/testuser'
+            && $request->method() === 'PUT'
+            && $body['enable_cisco'] === true
+            && $body['cisco_password'] === 'new_cisco_pass';
+    });
+});
+
+test('updateUser disables L2TP when enable_l2tp is false', function () {
+    Http::fake([
+        '*/api/v1/users/testuser' => Http::response([
+            'status' => 'success',
+            'message' => 'User updated successfully',
+        ], 200),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $userData = [
+        'enable_l2tp' => false,
+    ];
+
+    $result = $service->updateUser('testuser', $userData);
+
+    expect($result)->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users/testuser'
+            && $request->method() === 'PUT'
+            && $body['enable_l2tp'] === false
+            && ! isset($body['l2tp_password']);
+    });
+});
+
+test('updateUser disables Cisco when enable_cisco is false', function () {
+    Http::fake([
+        '*/api/v1/users/testuser' => Http::response([
+            'status' => 'success',
+            'message' => 'User updated successfully',
+        ], 200),
+    ]);
+
+    $service = new EylandooService(
+        'https://example.com',
+        'test-api-key-123',
+        ''
+    );
+
+    $userData = [
+        'enable_cisco' => false,
+    ];
+
+    $result = $service->updateUser('testuser', $userData);
+
+    expect($result)->toBeTrue();
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return $request->url() === 'https://example.com/api/v1/users/testuser'
+            && $request->method() === 'PUT'
+            && $body['enable_cisco'] === false
+            && ! isset($body['cisco_password']);
+    });
+});
