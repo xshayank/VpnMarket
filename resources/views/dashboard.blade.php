@@ -7,21 +7,8 @@
         </h2>
     </x-slot>
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-
-            {{-- نمایش موجودی و دکمه شارژ کیف پول --}}
-            <div class="p-6 bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg text-right">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <span class="text-gray-500">موجودی کیف پول شما:</span>
-                        <span class="font-bold text-lg text-green-500">{{ number_format(auth()->user()->balance) }} تومان</span>
-                    </div>
-                    <a href="{{ route('wallet.charge.form') }}" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-                        شارژ کیف پول
-                    </a>
-                </div>
-            </div>
+    <div class="py-6 md:py-12">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 space-y-4">
 
             {{-- نمایش پیغام‌های اطلاع‌رسانی --}}
             @if (session('renewal_success'))
@@ -42,15 +29,94 @@
                 </div>
             @endif
             @if (session('error'))
-                <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative text-right" role="alert">
+                <div class="bg-red-100 dark:bg-red-800/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg relative text-right" role="alert">
                     <strong class="font-bold">خطا!</strong>
                     <span class="block sm:inline">{{ session('error') }}</span>
                 </div>
             @endif
 
-            <div x-data="{ tab: 'my_services' }" class="bg-white/70 dark:bg-gray-900/70 rounded-2xl shadow-lg backdrop-blur-md p-4 sm:p-6">
+            {{-- Compact Stats Header - Marzban Style --}}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {{-- Wallet Balance Card --}}
+                <div class="bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl p-4 text-white shadow-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-blue-100 opacity-80">موجودی</p>
+                            <p class="text-lg md:text-xl font-bold mt-1">{{ number_format(auth()->user()->balance) }}</p>
+                            <p class="text-xs text-blue-100">تومان</p>
+                        </div>
+                        <div class="bg-white/20 rounded-full p-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Active Services Card --}}
+                <div class="bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 rounded-xl p-4 text-white shadow-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-green-100 opacity-80">سرویس‌های فعال</p>
+                            <p class="text-lg md:text-xl font-bold mt-1">{{ $orders->count() }}</p>
+                            <p class="text-xs text-green-100">سرویس</p>
+                        </div>
+                        <div class="bg-white/20 rounded-full p-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Total Transactions Card --}}
+                <div class="bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 rounded-xl p-4 text-white shadow-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-purple-100 opacity-80">تراکنش‌ها</p>
+                            <p class="text-lg md:text-xl font-bold mt-1">{{ $transactions->count() }}</p>
+                            <p class="text-xs text-purple-100">تراکنش</p>
+                        </div>
+                        <div class="bg-white/20 rounded-full p-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Referrals Card --}}
+                <div class="bg-gradient-to-br from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700 rounded-xl p-4 text-white shadow-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-amber-100 opacity-80">دعوت‌های موفق</p>
+                            <p class="text-lg md:text-xl font-bold mt-1">{{ auth()->user()->referrals()->count() }}</p>
+                            <p class="text-xs text-amber-100">نفر</p>
+                        </div>
+                        <div class="bg-white/20 rounded-full p-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Action Buttons Row --}}
+            <div class="flex flex-wrap gap-2 justify-end">
+                <a href="{{ route('wallet.charge.form') }}" 
+                   class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors">
+                    <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                    </svg>
+                    شارژ کیف پول
+                </a>
+            </div>
+
+            {{-- Main Content Card --}}
+            <div x-data="{ tab: 'my_services' }" class="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
                 <div class="border-b border-gray-200 dark:border-gray-700">
-                    <nav class="-mb-px flex space-x-4 space-x-reverse px-4 sm:px-8" aria-label="Tabs">
+                    <nav class="-mb-px flex flex-wrap gap-1 px-4 sm:px-8 py-2" aria-label="Tabs">
                         <button @click="tab = 'my_services'" :class="{'border-indigo-500 text-indigo-600 dark:text-indigo-400': tab === 'my_services', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200': tab !== 'my_services'}" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
                             سرویس‌های من
                         </button>

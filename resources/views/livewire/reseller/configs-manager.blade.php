@@ -605,6 +605,49 @@
                                     </div>
                                 @endif
 
+                                {{-- Reset Traffic Section --}}
+                                <div class="pt-4 border-t border-gray-200 dark:border-gray-700" x-data="{ showResetConfirm: false }">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">ریست ترافیک</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">ترافیک مصرفی کاربر را صفر کنید</p>
+                                        </div>
+                                        <button type="button" 
+                                                @click="showResetConfirm = true"
+                                                class="inline-flex items-center px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-lg transition-colors">
+                                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                            </svg>
+                                            ریست ترافیک
+                                        </button>
+                                    </div>
+
+                                    {{-- Reset Confirmation Dialog --}}
+                                    <div x-show="showResetConfirm" 
+                                         x-cloak 
+                                         x-transition
+                                         class="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                        <p class="text-sm text-amber-800 dark:text-amber-200 mb-3">
+                                            آیا مطمئن هستید که می‌خواهید ترافیک مصرفی این کاربر را صفر کنید؟ این عملیات قابل بازگشت نیست.
+                                        </p>
+                                        <div class="flex gap-2 justify-end">
+                                            <button type="button" 
+                                                    @click="showResetConfirm = false"
+                                                    class="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                                                انصراف
+                                            </button>
+                                            <button type="button" 
+                                                    wire:click="resetTraffic({{ $editConfig->id }})"
+                                                    @click="showResetConfirm = false"
+                                                    wire:loading.attr="disabled"
+                                                    class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                                                <span wire:loading.remove wire:target="resetTraffic">بله، ریست شود</span>
+                                                <span wire:loading wire:target="resetTraffic">در حال ریست...</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {{-- Actions --}}
                                 <div class="flex gap-3 pt-4">
                                     <button type="submit" 

@@ -498,6 +498,60 @@ class ConfigsManager extends Component
         }
     }
 
+    public function resetTraffic($configId)
+    {
+        $config = ResellerConfig::find($configId);
+        if (!$config || $config->reseller_id !== $this->reseller->id) {
+            session()->flash('error', 'کانفیگ یافت نشد.');
+            return;
+        }
+
+        try {
+            DB::transaction(function () use ($config) {
+                $oldUsageBytes = $config->usage_bytes;
+
+                // Try to reset on remote panel first
+                $panelResetSuccess = false;
+                if ($config->panel_id) {
+                    $panel = Panel::find($config->panel_id);
+                    if ($panel) {
+                        $provisioner = new ResellerProvisioner;
+                        $result = $provisioner->resetUserUsage(
+                            $panel->panel_type,
+                            $panel->getCredentials(),
+                            $config->panel_user_id
+                        );
+                        $panelResetSuccess = $result['success'] ?? false;
+                    }
+                }
+
+                // Reset local usage counter
+                $config->update([
+                    'usage_bytes' => 0,
+                ]);
+
+                // Create audit log entry
+                ResellerConfigEvent::create([
+                    'reseller_config_id' => $config->id,
+                    'type' => 'traffic_reset',
+                    'meta' => [
+                        'user_id' => Auth::id(),
+                        'old_usage_bytes' => $oldUsageBytes,
+                        'panel_reset_success' => $panelResetSuccess,
+                        'reset_at' => now()->toDateTimeString(),
+                    ],
+                ]);
+
+                session()->flash('success', 'ترافیک کاربر با موفقیت صفر شد.');
+            });
+
+            $this->loadStats();
+        } catch (\Exception $e) {
+            Log::error('Traffic reset failed: ' . $e->getMessage());
+            session()->flash('error', 'خطا در ریست کردن ترافیک: ' . $e->getMessage());
+        }
+    }
+
     public function toggleStatus($configId)
     {
         $config = ResellerConfig::find($configId);
