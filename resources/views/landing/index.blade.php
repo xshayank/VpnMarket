@@ -54,6 +54,7 @@
         .panels-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
         .plans-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
         .features-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+        .protocols-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
         .section { padding: 42px 0; }
         .section h2 { margin: 0 0 12px; font-size: 24px; }
         .section p.lead { margin: 0 0 24px; color: var(--muted); }
@@ -88,7 +89,7 @@
 <div class="container">
     <header class="hero">
         <div>
-            <div class="pill">فالکو پنل • OpenVPN و V2Ray در یک پلتفرم • پشتیبانی ۲۴/۷</div>
+            <div class="pill">فالکو پنل • OpenVPN، V2Ray، L2TP و Cisco در یک پلتفرم • پشتیبانی ۲۴/۷</div>
             <h1>{{ $homepage['hero_title'] }}</h1>
             <p class="subtitle">{{ $homepage['hero_subtitle'] }}</p>
             <div class="cta-row">
@@ -127,7 +128,7 @@
     <section class="section">
         <div class="section-header">
             <h2>چطور کار می‌کند؟</h2>
-            <p class="lead">در سه مرحله ساده نماینده شوید و به هر دو پروتکل OpenVPN و V2Ray دسترسی داشته باشید.</p>
+            <p class="lead">در سه مرحله ساده نماینده شوید و به چهار پروتکل OpenVPN، V2Ray، L2TP و Cisco دسترسی داشته باشید.</p>
         </div>
         <div class="grid steps-grid">
             <div class="card"><div class="panel-tag">۱</div><h3>ثبت‌نام سریع</h3><p class="muted">فرم ثبت‌نام را پر کنید و نوع نماینده (کیف پول یا ترافیک) را انتخاب نمایید.</p></div>
@@ -137,15 +138,48 @@
         </div>
     </section>
 
+    <section class="section" id="protocols">
+        <div class="section-header">
+            <h2>چهار پروتکل آماده استفاده</h2>
+            <p class="lead">همه پروتکل‌ها داخل یک حساب در دسترس هستند؛ کافی است ثبت‌نام کنید تا OpenVPN، V2Ray، L2TP و Cisco را برای مشتریان خود فعال کنید.</p>
+        </div>
+        <div class="grid protocols-grid">
+            <div class="card glass">
+                <div class="inline-icon">🛡️</div>
+                <h3 style="margin: 8px 0 6px;">OpenVPN</h3>
+                <p class="muted">پروتکل امن و پرکاربرد برای اتصال پایدار و سازگار با اکثر دستگاه‌ها.</p>
+            </div>
+            <div class="card glass">
+                <div class="inline-icon">⚡</div>
+                <h3 style="margin: 8px 0 6px;">V2Ray</h3>
+                <p class="muted">انعطاف‌پذیر و سریع برای عبور از محدودیت‌ها با کانفیگ‌های متعدد و قابل شخصی‌سازی.</p>
+            </div>
+            <div class="card glass">
+                <div class="inline-icon">🌐</div>
+                <h3 style="margin: 8px 0 6px;">L2TP</h3>
+                <p class="muted">اتصال ساده با راه‌اندازی سریع روی سیستم‌عامل‌های مختلف و مشتریان غیرتخصصی.</p>
+            </div>
+            <div class="card glass">
+                <div class="inline-icon">🏢</div>
+                <h3 style="margin: 8px 0 6px;">Cisco</h3>
+                <p class="muted">گزینه محبوب سازمانی با پایداری بالا برای کاربران حرفه‌ای و تیم‌های شرکتی.</p>
+            </div>
+        </div>
+        <div class="cta-row" style="margin-top: 20px;">
+            <a class="btn btn-primary" href="{{ $primaryCtaLink }}">اکانت بسازید و هر چهار پروتکل را فعال کنید</a>
+            <a class="btn btn-secondary" href="{{ $primaryCtaLink }}">مشاهده پنل و ساخت کانفیگ</a>
+        </div>
+    </section>
+
     @if($homepage['show_panels'] && $panels->isNotEmpty())
     <section class="section" id="panels">
         <div class="section-header">
             <h2>پنل‌های پشتیبانی‌شده</h2>
-            <p class="lead">همه پنل‌ها داخل یک داشبورد و یک حساب مشترک هستند؛ می‌توانید هم‌زمان روی مرزنشین (V2Ray) و ایلاندو (OpenVPN) کانفیگ بسازید.</p>
+            <p class="lead">همه پنل‌ها داخل یک داشبورد و یک حساب مشترک هستند؛ می‌توانید هم‌زمان روی مرزنشین (V2Ray)، ایلاندو (OpenVPN)، L2TP و Cisco کانفیگ بسازید.</p>
         </div>
         <div class="glass card" style="margin-bottom: 16px;">
             <p class="muted" style="margin: 0;">
-                حساب شما یکی است و هر دو پنل مرزنشین (V2Ray) و ایلاندو (OpenVPN) داخل همان داشبورد قرار دارند. می‌توانید برای هر مشتری یا سناریو، کانفیگ را در هر دو پنل ایجاد و مدیریت کنید و لازم نیست بین پنل‌های جداگانه جابه‌جا شوید.
+                حساب شما یکی است و پنل‌های مرزنشین (V2Ray)، ایلاندو (OpenVPN)، به‌همراه L2TP و Cisco داخل همان داشبورد قرار دارند. می‌توانید برای هر مشتری یا سناریو، کانفیگ را در هر چهار پروتکل ایجاد و مدیریت کنید و لازم نیست بین پنل‌های جداگانه جابه‌جا شوید.
             </p>
         </div>
         <div class="grid panels-grid">
@@ -159,7 +193,7 @@
                 <div class="card glass">
                     <div class="panel-tag">{{ ucfirst($panel->panel_type) }}</div>
                     <h3 style="margin: 8px 0 6px;">{{ $panel->name }}</h3>
-                    <p class="muted">هر کدام از این پنل‌ها داخل یک حساب واحد در دسترس است؛ می‌توانید هم‌زمان روی مرزنشین (V2Ray) و ایلاندو (OpenVPN) کانفیگ بسازید و بین آن‌ها سوییچ کنید.</p>
+                    <p class="muted">هر کدام از این پنل‌ها داخل یک حساب واحد در دسترس است؛ می‌توانید هم‌زمان روی مرزنشین (V2Ray)، ایلاندو (OpenVPN)، L2TP و Cisco کانفیگ بسازید و بین آن‌ها سوییچ کنید.</p>
                     <a class="btn btn-secondary" href="{{ $panelLink }}" aria-label="ثبت‌نام برای {{ $panel->name }}">ثبت‌نام و دسترسی به همه پنل‌ها</a>
                 </div>
             @endforeach
